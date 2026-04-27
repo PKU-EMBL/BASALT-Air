@@ -1,0 +1,9 @@
+biopython
+pandas
+numpy
+scikit-learn
+torch
+
+[dev]
+pytest
+pytest-cov

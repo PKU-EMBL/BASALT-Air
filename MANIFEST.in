@@ -1,0 +1,12 @@
+include README.md
+include LICENSE
+include pyproject.toml
+recursive-include src/basalt *.py
+recursive-include src/basalt/scripts *.pl
+
+# Hard-exclude bytecode / VCS artefacts from sdist + wheel
+global-exclude __pycache__
+global-exclude *.py[cod]
+global-exclude *.so
+global-exclude .DS_Store
+global-exclude .git*

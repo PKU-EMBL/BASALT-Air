@@ -1,0 +1,76 @@
+[workspace]
+name = "BASALT"
+version = "1.2.0"
+description = "Modular metagenomic binning and refinement pipeline"
+authors = ["BASALT contributors"]
+channels = ["conda-forge", "bioconda"]
+platforms = ["linux-64"]
+
+# CUDA 12.x runtime — pixi will pick GPU pytorch variants matching this.
+# L40S + driver 580 (reports CUDA 13) is forward-compatible with CUDA 12 builds.
+[system-requirements]
+cuda = "12"
+
+# ---------- Conda dependencies (Python + bioinformatics tools) ----------
+[dependencies]
+python = "3.12.*"
+perl   = "*"
+
+# Python libs needed by BASALT
+biopython    = "*"
+pandas       = "*"
+numpy        = "*"
+scikit-learn = "*"
+pytorch-gpu  = "*"
+
+# Binners
+metabat2 = "*"
+maxbin2  = "*"
+concoct  = "*"
+semibin  = "*"
+
+# Quality control
+checkm2 = "*"
+
+# Aligners
+bowtie2  = "*"
+bwa      = "*"
+samtools = "*"
+minimap2 = "*"
+
+# Annotation / search
+blast    = "*"
+diamond  = "*"
+hmmer    = "*"
+prodigal = "*"
+
+# Assemblers / polishing
+spades    = "*"
+unicycler = "*"
+idba      = "*"
+racon     = "*"
+pilon     = "*"
+miniasm   = "*"
+megahit   = "*"
+
+# Utilities
+pplacer        = "*"
+bedtools       = "*"
+entrez-direct  = "*"
+ncbi-vdb       = "*"
+
+# ---------- Editable install of BASALT itself ----------
+[pypi-dependencies]
+BASALT = { path = ".", editable = true }
+
+# ---------- Env vars set automatically when entering the env ----------
+[activation.env]
+BASALT_WEIGHT = "/scratch2/mz32/zhaorui/weight/BASALT"
+CHECKM2DB     = "/fs04/scratch2/mz32/zhaorui/db/checkm2db/CheckM2_database/uniref100.KO.1.dmnd"
+# CHECKM_DATA_PATH = "/fs04/scratch2/mz32/zhaorui/checkmdb"   # only set if running -q checkm (legacy CheckM)
+
+# ---------- Convenience tasks ----------
+[tasks]
+help            = "BASALT --help"
+download-weights = "BASALT_models_download --path $BASALT_WEIGHT"
+checkm2-db       = "checkm2 database --download --path /fs04/scratch2/mz32/zhaorui/checkm2db"

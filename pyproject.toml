@@ -1,0 +1,58 @@
+[build-system]
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "BASALT"
+version = "1.2.0"
+description = "Modular metagenomic binning and refinement pipeline"
+readme = "README.md"
+requires-python = "==3.12.*"
+license = { text = "MIT" }
+authors = [
+    { name = "BASALT contributors" },
+]
+keywords = ["metagenomics", "binning", "MAGs", "bioinformatics"]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering :: Bio-Informatics",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.12",
+    "Operating System :: POSIX :: Linux",
+]
+dependencies = [
+    "biopython",
+    "pandas",
+    "numpy",
+    "scikit-learn",
+    "torch",
+]
+
+[project.optional-dependencies]
+# Heavy DL training-related extras kept optional because they pull in CUDA stacks.
+dev = [
+    "pytest",
+    "pytest-cov",
+]
+
+[project.scripts]
+BASALT = "basalt.cli:main"
+BASALT_models_download = "basalt.ml.download:main"
+
+[project.urls]
+Homepage = "https://github.com/EMBL-PKU/BASALT"
+Repository = "https://github.com/EMBL-PKU/BASALT"
+Issues = "https://github.com/EMBL-PKU/BASALT/issues"
+
+[tool.setuptools]
+package-dir = { "" = "src" }
+include-package-data = true
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["basalt*"]
+
+[tool.setuptools.package-data]
+"basalt.scripts" = ["*.pl"]

@@ -1,0 +1,3 @@
+[console_scripts]
+BASALT = basalt.cli:main
+BASALT_models_download = basalt.ml.download:main
