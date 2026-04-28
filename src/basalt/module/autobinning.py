@@ -23,8 +23,8 @@ from basalt.steps.s3_bins_comparator_within_group import *
 from basalt.steps.s3_bins_comparator_within_group import set_qc_backend as _set_s3_backend
 from basalt.steps.s4_multiple_assembly_comparator import *
 from basalt.steps.s4_multiple_assembly_comparator import set_qc_backend as _set_s4_backend
-from glob import glob
 from basalt.core.cleanup import *
+from glob import glob  # keep last: cleanup re-exports `glob` (module) via wildcard
 
 
 def BASALT_main_autobinning(assembly_list, datasets, num_threads, lr_list, hifi_list,

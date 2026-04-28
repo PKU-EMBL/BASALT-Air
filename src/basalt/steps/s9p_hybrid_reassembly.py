@@ -171,6 +171,7 @@ def hybrid_bin_comparison(paired_bins, bin_checkm):
     f=open('Reassembled_bins_comparison.txt','w')
     best_bin, best_bin_checkm={}, {}
     for item in paired_bins.keys():
+        best_bin_checkm_name=None
         for item2 in paired_bins[item]:
             if '_polished' in item2:
                 best_bin_checkm_name_list=item2.split('.')
@@ -182,11 +183,16 @@ def hybrid_bin_comparison(paired_bins, bin_checkm):
                 f.write(str(item2)+'\t'+str(bin_checkm[best_bin_checkm_name])+'\n')
 
         for item2 in paired_bins[item]:
-            if '_polished' not in item2:   
+            if '_polished' not in item2:
                 reass_bin_checkm_name_list=item2.split('.')
                 reass_bin_checkm_name_list.remove(reass_bin_checkm_name_list[-1])
                 reass_bin_checkm_name='.'.join(reass_bin_checkm_name_list)
                 f.write(str(item2)+'\t'+str(bin_checkm[reass_bin_checkm_name])+'\n')
+                if best_bin_checkm_name is None:
+                    # No polished baseline for this bin; nothing to compare
+                    # against, so adopt the reassembly entry as best.
+                    best_bin_checkm_name=reass_bin_checkm_name
+                    continue
                 best_bin_cpn=bin_checkm[best_bin_checkm_name]['Completeness']
                 best_bin_ctn=bin_checkm[best_bin_checkm_name]['Contamination']
                 best_bin_ml=bin_checkm[best_bin_checkm_name]['contig_size']
@@ -257,6 +263,9 @@ def hybrid_bin_comparison(paired_bins, bin_checkm):
                     else:
                         continue
 
+        if best_bin_checkm_name is None:
+            print('Skipping '+str(item)+': no polished or reassembly entry found')
+            continue
         best_bin[best_bin_checkm_name+'.fa']=best_bin_checkm_name
         best_bin_checkm[best_bin_checkm_name]=bin_checkm[best_bin_checkm_name].copy()
     f.close()

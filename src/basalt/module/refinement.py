@@ -25,8 +25,8 @@ from basalt.steps.s7_contigs_retrieve_within_group import *
 from basalt.steps.s7_contigs_retrieve_within_group import set_qc_backend as _set_s7_backend
 from basalt.steps.s7lr_finding_sr_contigs import *
 from basalt.steps.s7lr_finding_sr_contigs import set_qc_backend as _set_s7lr_backend
-from glob import glob
 from basalt.core.cleanup import *
+from glob import glob  # keep last: cleanup re-exports `glob` (module) via wildcard
 
 
 def BASALT_main_refinement(assembly_list, datasets, num_threads, lr_list, hifi_list,
@@ -89,8 +89,11 @@ def BASALT_main_refinement(assembly_list, datasets, num_threads, lr_list, hifi_l
             f_cp_m=open('Basalt_checkpoint.txt', 'w')
             f_cp_m.close()
     else:
-        print('Start a new project')
-        cleanup(assembly_list)
+        # Refinement consumes upstream artifacts (Coverage_matrix_list.txt,
+        # Assembly_mo_list.txt, Bestbinset_list.txt, Assembly_MoDict.txt)
+        # produced by autobinning. The global cleanup() removes those, so a
+        # downstream phase must NOT call it — only reset its own checkpoint.
+        print('Resetting refinement checkpoint (autobinning outputs preserved)')
         f_cp_m=open('Basalt_checkpoint.txt', 'w')
         f_cp_m.close()
 
@@ -275,6 +278,21 @@ def BASALT_main_refinement(assembly_list, datasets, num_threads, lr_list, hifi_l
 
     ### Autobinner
     if functional_module == 'refinement' or functional_module == 'all':
+        if last_step < 7:
+            _required = ['Coverage_matrix_list.txt', 'Assembly_mo_list.txt',
+                         'Bestbinset_list.txt', 'Assembly_MoDict.txt']
+            _missing = [_f for _f in _required if not os.path.exists(_f)]
+            if _missing:
+                raise FileNotFoundError(
+                    'Refinement requires autobinning outputs in the working '
+                    'directory ({pwd}); missing: {files}.\n'
+                    'Run `BASALT --module autobinning ...` (with the same '
+                    '-a/-s1/-s2 inputs) first, or use `--module all` to run '
+                    'the full pipeline. If a previous autobinning run was '
+                    'interrupted, rerun it with `--mode new` to regenerate '
+                    'these files.'.format(pwd=pwd, files=', '.join(_missing))
+                )
+
         if last_step < 4:
             print('Starting outlier removal process')
             coverage_matrix_list, connections_list, assembly_mo_list, bestbinset_list = [], [], [], []

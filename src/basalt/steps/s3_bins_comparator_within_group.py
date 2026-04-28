@@ -849,6 +849,8 @@ def bins_comparator_multiple_groups(genome_folder, assembly):
     num2=num+1
     if str(num2) not in finished_step:
         bestbinset=bin_within_a_group_comparator('Iteration_'+str(num)+'_genomes', str(assembly), num)
+    else:
+        bestbinset=str(assembly)+'_BestBinsSet'
 
     os.system('rm -rf Iteration_'+str(num)+'_genomes')
     os.system('mkdir '+str(assembly)+'_comparison_files')

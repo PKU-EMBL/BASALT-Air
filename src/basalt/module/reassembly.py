@@ -24,8 +24,37 @@ from basalt.steps.s9p_hybrid_reassembly import *
 from basalt.steps.s9p_hybrid_reassembly import set_qc_backend as _set_s9p_backend
 from basalt.steps.s10_olc import *
 from basalt.steps.s10_olc import set_qc_backend as _set_s10_backend
-from glob import glob
 from basalt.core.cleanup import *
+from glob import glob  # keep last: cleanup re-exports `glob` (module) via wildcard
+
+
+def _folder_has_fasta(path):
+    if not os.path.isdir(path):
+        return False
+    for _, _, files in os.walk(path):
+        for f in files:
+            ext = f.rsplit('.', 1)[-1].lower()
+            if ext in ('fa', 'fna', 'fasta'):
+                return True
+    return False
+
+
+def _resolve_pre_olc_bin_folder(pwd, lr_list):
+    """Pick the bin folder fed into the OLC step when the checkpoint is empty.
+
+    Mirrors the historical inline logic: prefer the polished MAGs when long
+    reads are present, otherwise fall back through the retrieved-retrieved
+    and retrieved folders.
+    """
+    candidates = []
+    if len(lr_list) != 0:
+        candidates.append('BestBinset_outlier_refined_filtrated_retrieved_MAGs_polished')
+    candidates.append('BestBinset_outlier_refined_filtrated_retrieved_retrieved')
+    candidates.append('BestBinset_outlier_refined_filtrated_retrieved')
+    for c in candidates:
+        if _folder_has_fasta(os.path.join(pwd, c)):
+            return c
+    return candidates[-1]
 
 
 def BASALT_main_re_assembly(assembly_list, datasets, num_threads, lr_list, hifi_list,
@@ -88,8 +117,10 @@ def BASALT_main_re_assembly(assembly_list, datasets, num_threads, lr_list, hifi_
             f_cp_m=open('Basalt_checkpoint.txt', 'w')
             f_cp_m.close()
     else:
-        print('Start a new project')
-        cleanup(assembly_list)
+        # Reassembly consumes upstream artifacts produced by autobinning /
+        # refinement. The global cleanup() would remove those, so a
+        # downstream phase must NOT call it — only reset its own checkpoint.
+        print('Resetting reassembly checkpoint (upstream outputs preserved)')
         f_cp_m=open('Basalt_checkpoint.txt', 'w')
         f_cp_m.close()
 
@@ -311,10 +342,13 @@ def BASALT_main_re_assembly(assembly_list, datasets, num_threads, lr_list, hifi_
                     f_cp_m.write('\n'+'8th contig OLC done!'+'\t'+target_bin_folder+'_OLC')
                     f_cp_m.close()
                 else:
+                    target_bin_folder=None
                     for line in open('Basalt_checkpoint.txt', 'r'):
                         if '7th' == str(line[0:3]):
                             target_bin_folder=str(line).strip().split('\t')[1].strip()
-                    # target_bin_folder='BestBinset_outlier_refined_filtrated_retrieved'
+                    if target_bin_folder is None:
+                        target_bin_folder=_resolve_pre_olc_bin_folder(pwd, lr_list)
+                        print('No 7th-step entry in checkpoint; falling back to '+target_bin_folder)
 
                     print('Long-read presented. Skip OLC process.')
                     f_cp_m=open('Basalt_checkpoint.txt', 'a')
@@ -341,10 +375,13 @@ def BASALT_main_re_assembly(assembly_list, datasets, num_threads, lr_list, hifi_
                 #         print('There is not bin in BestBinset_outlier_refined_filtrated_retrieved_retrieved. Try BestBinset_outlier_refined_filtrated_retrieved')
                 #         target_bin_folder='BestBinset_outlier_refined_filtrated_retrieved'
 
+                target_bin_folder=None
                 for line in open('Basalt_checkpoint.txt', 'r'):
                     if '7th' == str(line[0:3]):
                         target_bin_folder=str(line).strip().split('\t')[1].strip()
-                # target_bin_folder='BestBinset_outlier_refined_filtrated_retrieved'
+                if target_bin_folder is None:
+                    target_bin_folder=_resolve_pre_olc_bin_folder(pwd, lr_list)
+                    print('No 7th-step entry in checkpoint; falling back to '+target_bin_folder)
 
                 print('Long-read presented. Skip OLC process.')
                 f_cp_m=open('Basalt_checkpoint.txt', 'a')

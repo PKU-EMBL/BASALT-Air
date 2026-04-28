@@ -21,8 +21,8 @@ from basalt.steps.s4_multiple_assembly_comparator import *
 from basalt.steps.s4_multiple_assembly_comparator import set_qc_backend as _set_s4_backend
 from basalt.steps.s5_outlier_remover_dl import *
 from basalt.steps.s5_outlier_remover_dl import set_qc_backend as _set_s5_backend
-from glob import glob
 from basalt.core.cleanup import *
+from glob import glob  # keep last: cleanup re-exports `glob` (module) via wildcard
 
 
 def data_feeding_main(assembly_list, datasets, num_threads, data_feeding_folder,
@@ -95,8 +95,12 @@ def data_feeding_main(assembly_list, datasets, num_threads, data_feeding_folder,
             f_cp_m=open('Basalt_checkpoint.txt', 'w')
             f_cp_m.close()
     else:
-        print('Start a new project')
-        cleanup(assembly_list)
+        # Data feeding integrates external binsets INTO an existing BASALT
+        # run, so the upstream binset (BestBinset / BestBinset_outlier_refined
+        # / Coverage_matrix_* / condense_connections_* / etc.) must be kept.
+        # The global cleanup() would wipe all of that, so a downstream phase
+        # must NOT call it — only reset its own checkpoint.
+        print('Resetting data-feeding checkpoint (existing binset preserved)')
         f_cp_m=open('Basalt_checkpoint.txt', 'w')
         f_cp_m.close()
 

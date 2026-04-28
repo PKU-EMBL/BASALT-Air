@@ -1859,6 +1859,22 @@ def Contig_recruiter_main(binset, outlier_remover_folder, num_threads, parameter
             last_step=0
             f_cp=open('S6_checkpoint.txt', 'w')
             f_cp.close()
+
+        # Stale-checkpoint guard: the recorded step claims an artifact exists,
+        # but the workdir may have been cleaned between runs. If the artifact
+        # required to resume is missing, restart S6 from scratch instead of
+        # crashing later with FileNotFoundError.
+        required_for_step = {
+            1: ('Bin_connecting_contigs.txt', 'Bin_connecting_contigs_level.txt'),
+        }
+        for step_n, files in required_for_step.items():
+            if last_step >= step_n and not all(os.path.isfile(f) for f in files):
+                print('Stale S6 checkpoint detected (missing artifact for step '
+                      + str(step_n) + '); restarting S6 from step 0')
+                last_step = 0
+                f_cp = open('S6_checkpoint.txt', 'w')
+                f_cp.close()
+                break
     else:
         last_step=0
         f_cp=open('S6_checkpoint.txt', 'w')
