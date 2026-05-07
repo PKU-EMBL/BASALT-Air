@@ -915,8 +915,8 @@ def blast(binset_folder, bin_name, lr_fa, pwd):
 
 def checkm(bin_folder, pwd):
     """Parse QC results under ``bin_folder`` using the configured backend."""
-    print('Parsing '+bin_folder+' checkm output')
     backend = _require_backend()
+    print('Parsing '+bin_folder+' '+backend.name+' output')
     raw = backend.parse_results(pwd+'/'+str(bin_folder))
     refined_checkm = {}
     for binID, m in raw.items():

@@ -2956,9 +2956,15 @@ def multiple_assembly_comparator_main(Contig_list_o, BestBinSet_list_o,
         # fcheck.close()
 
     elif step == 'second_drep' or step == 'final_drep':
-        final_binset_comparator(final_folder_list, Coverage_list, datasets, num_threads, pwd, step) ### Awaiting for alteration
+        # Callers pass the target folder via BestBinSet_list_o (single-element
+        # list) per the __main__ contract below.
+        if not BestBinSet_list_o:
+            raise ValueError(
+                "step={!r} requires BestBinSet_list_o to contain the target "
+                "binset folder name".format(step))
+        final_binset_comparator(BestBinSet_list_o[0], Coverage_list_o, datasets, num_threads, pwd, step)
 
-    print(str(step)+' bin de-replacation done!')
+    print(str(step)+' bin de-replication done!')
 
 if __name__ == '__main__': 
     step='initial_drep' 

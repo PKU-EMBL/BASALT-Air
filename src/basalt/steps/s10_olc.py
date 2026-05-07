@@ -1920,7 +1920,7 @@ def reassembly_OLC_main(target_bin_folder, step, bin_comparison_folder,
         accomplished_bins[str(line).strip()]=1
 
     if len(bestbinset_sim_bin) != len(accomplished_bins):
-        print('Multiple threads started while using checkm with taxonomy wf mode')
+        print('Multiple threads started in taxonomy filtration mode')
         # for i in range(1, len(bestbinset_sim_bin_d)):
         pool=Pool(processes=num_threads)
         for item in bestbinset_sim_bin:
@@ -1931,7 +1931,7 @@ def reassembly_OLC_main(target_bin_folder, step, bin_comparison_folder,
                 result[item]=pool.apply_async(mul_threads, args=(item, bestbinset_sim_bin, bestbinset_checkm, step, pwd, aligned_len_cutoff, similarity_cutoff, orig_binset, target_bin_folder, bin_comparison_folder, coverage_extension, num_threads, 'tw'))
         pool.close()
         pool.join()
-        print('Multiple threads ended while using checkm with taxonomy wf mode')
+        print('Multiple threads ended in taxonomy filtration mode')
 
         result2={}
         for item in result:
@@ -1975,7 +1975,7 @@ def reassembly_OLC_main(target_bin_folder, step, bin_comparison_folder,
                 del incomplete_bin[bins_id]
 
         if len(incomplete_bin) != 0:
-            print('Multiple threads started while using checkm with lineage wf mode')
+            print('Multiple threads started in lineage filtration mode')
             cleanup(3)
             project_num=int(ram/18)+1
             p_per_project=int(num_threads/project_num)
@@ -1987,7 +1987,7 @@ def reassembly_OLC_main(target_bin_folder, step, bin_comparison_folder,
                     result[item]=pool.apply_async(mul_threads, args=(item, bestbinset_sim_bin, bestbinset_checkm, step, pwd, aligned_len_cutoff, similarity_cutoff, orig_binset, target_bin_folder, bin_comparison_folder, coverage_extension, p_per_project, 'lw'))
             pool.close()
             pool.join()
-            print('Multiple threads ended while using checkm with lineage wf mode')
+            print('Multiple threads ended in lineage filtration mode')
 
             result2={}
             for item in result:

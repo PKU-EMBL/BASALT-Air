@@ -2426,7 +2426,7 @@ def _bin_comparison_checkm(original_bin_folder, new_bins_checkm, new_bin_folder,
                         file_name=str(file).split('_RT-D')[0]
                     if '.retrieved_level' in file:
                         file_name=str(file).split('.retrieved_level')[0]
-                    if 'metabat' in file_name or 'metabinner' in file_name or 'vamb' in file_name:
+                    if 'metabat' in file_name or 'vamb' in file_name or 'lorbin' in file_name:
                         os.system('mv '+file+' '+str(file_name)+'.fa')
                         f.write(str(file)+'\t'+str(file_name)+'.fa'+'\n')
                     else:

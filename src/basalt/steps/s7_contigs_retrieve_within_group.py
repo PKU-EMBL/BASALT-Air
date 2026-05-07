@@ -1032,7 +1032,7 @@ def _bin_comparison_checkm2(original_bin_folder, new_bins_checkm, new_bin_folder
                         file_name=str(file).split('_RT-D')[0]
                     if '.retrieved_level' in file:
                         file_name=str(file).split('.retrieved_level')[0]
-                    # if 'metabat' in file_name or 'metabinner' in file_name or 'vamb' in file_name:
+                    # if 'metabat' in file_name or 'vamb' in file_name:
                     #     os.system('mv '+file+' '+str(file_name)+'.fa')
                     #     f.write(str(file)+'\t'+str(file_name)+'.fa'+'\n')
                     else:
@@ -1804,12 +1804,12 @@ def Contig_retrieve_within_group(assemblies_list, binset, outlier_remover_folder
                         if len(bin_re[bin_name]) >= 2:
                             for i in range(1, len(bin_re[bin_name])):
                                 i0=i-1
-                                if cutoff0 < cutoff1:
-                                    cutoff0=bin_re_list[bin_name][i0]
-                                    cutoff1=bin_re_list[bin_name][i]
+                                _a=bin_re_list[bin_name][i0]
+                                _b=bin_re_list[bin_name][i]
+                                if _a < _b:
+                                    cutoff0, cutoff1 = _a, _b
                                 else:
-                                    cutoff0=bin_re_list[bin_name][i]
-                                    cutoff1=bin_re_list[bin_name][i0]
+                                    cutoff0, cutoff1 = _b, _a
 
                                 bin0=bin_re[bin_name][cutoff0]
                                 bin1=bin_re[bin_name][cutoff1]
@@ -2743,7 +2743,7 @@ def _bin_comparison_checkm(original_bin_folder, new_bins_checkm, new_bin_folder,
                         file_name=str(file).split('_RT-D')[0]
                     if '.retrieved_level' in file:
                         file_name=str(file).split('.retrieved_level')[0]
-                    if 'metabat' in file_name or 'metabinner' in file_name or 'vamb' in file_name:
+                    if 'metabat' in file_name or 'vamb' in file_name or 'lorbin' in file_name:
                         os.system('mv '+file+' '+str(file_name)+'.fa')
                         f.write(str(file)+'\t'+str(file_name)+'.fa'+'\n')
                     else:

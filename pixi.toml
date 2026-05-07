@@ -28,6 +28,16 @@ metabat2 = "*"
 maxbin2  = "*"
 concoct  = "*"
 semibin  = "*"
+# Optional extra binners (`-e v` / `-e l`) are NOT bundled in this env:
+#   * VAMB 4.x is pinned to Python 3.11 (incompatible with our 3.12 base);
+#     VAMB 5.x demands a newer PyTorch that conflicts with the rest of
+#     the bioconda graph here. If you need `-e v`, create a separate
+#     conda env: `conda create -n vamb_env -c bioconda 'vamb>=5'` and
+#     prepend its bin/ to $PATH before invoking BASALT.
+#   * LorBin is not on conda/PyPI; install it from its repository and
+#     ensure the `LorBin` binary is on $PATH.
+# `BASALT --check-deps -e v,l` reports the per-tool status without
+# launching the pipeline.
 
 # Quality control
 checkm2 = "*"
@@ -70,7 +80,12 @@ CHECKM2DB     = "/fs04/scratch2/mz32/zhaorui/db/checkm2db/CheckM2_database/unire
 # CHECKM_DATA_PATH = "/fs04/scratch2/mz32/zhaorui/checkmdb"   # only set if running -q checkm (legacy CheckM)
 
 # ---------- Convenience tasks ----------
+# Run any of these from the repo root with: pixi run <task-name>
 [tasks]
-help            = "BASALT --help"
+help             = "BASALT --help"
+version          = "BASALT --version"
+check-deps       = "BASALT --check-deps"
 download-weights = "BASALT_models_download --path $BASALT_WEIGHT"
 checkm2-db       = "checkm2 database --download --path /fs04/scratch2/mz32/zhaorui/checkm2db"
+# Quick health check: package imports + console-script reachable + version pin matches.
+sanity = "python -c 'import basalt; from basalt.cli import main; from basalt.logger import setup_logger; print(\"basalt\", basalt.__version__, \"sanity OK\")'"

@@ -151,17 +151,11 @@ def BASALT_main_re_assembly(assembly_list, datasets, num_threads, lr_list, hifi_
         fx.write('BASALT started from 1st step'+'\n')
         fx.write('Assemblies: '+str(str(assembly_list).replace('[','').replace(']','').replace(' ','').replace('\'',''))+'\n')
         fx.write('Datasets: ')
-        datasets_list=datasets.split(',')
-        x=0
-        for ds in datasets_list:
-            x+=1
-            ds1=str(ds).split('[')[1].replace('\'','').replace(']','').replace(' ','')
-            if x == 1:
-                f.write(str(ds1))
-                fx.write(str(ds1))
-            else:
-                f.write('/'+str(ds1))
-                fx.write('/'+str(ds1))
+        for n_pair, ds_key in enumerate(datasets, start=1):
+            pair = ','.join(datasets[ds_key])
+            sep = '' if n_pair == 1 else '/'
+            f.write(sep + pair)
+            fx.write(sep + pair)
         f.write('\n')
         fx.write('\n')
         try:
@@ -195,10 +189,10 @@ def BASALT_main_re_assembly(assembly_list, datasets, num_threads, lr_list, hifi_
                     x=4
         else:
             print('Input format error! Please check the input file.')
-            print('BASALT supports the input (1) sequence files in  .gz, .zip, and .tar.gz; (2) and assemlies in .fa, .fna, .fasta.')
+            print('BASALT supports the input (1) sequence files in  .gz, .zip, and .tar.gz; (2) and assemblies in .fa, .fna, .fasta.')
             fx=open('Basalt_log.txt','a')
             fx.write('Input format error! Please check the input file.'+'\n')
-            fx.write('BASALT supports the input (1) sequence files in  .gz, .zip, and .tar.gz; (2) and assemlies in .fa, .fna, .fasta.'+'\n')
+            fx.write('BASALT supports the input (1) sequence files in  .gz, .zip, and .tar.gz; (2) and assemblies in .fa, .fna, .fasta.'+'\n')
             fx.close()
 
     if x > 1:
@@ -256,7 +250,7 @@ def BASALT_main_re_assembly(assembly_list, datasets, num_threads, lr_list, hifi_
     x=0
     assembly_list2=copy.deepcopy(assembly_list)
     for item in assembly_list:
-        hz_list=assembly_list[0].split('.')
+        hz_list=str(item).split('.')
         if len(hz_list) >= 2:
             if hz_list[-1] == 'fa' or hz_list[-1] == 'fasta' or hz_list[-1] == 'fna':
                 x=1
@@ -269,10 +263,10 @@ def BASALT_main_re_assembly(assembly_list, datasets, num_threads, lr_list, hifi_
                     x=4
         else:
             print('Input format error! Please check the input file.')
-            print('BASALT supports the input (1) sequence files in  .gz, .zip, and .tar.gz; (2) and assemlies in .fa, .fna, .fasta.')
+            print('BASALT supports the input (1) sequence files in  .gz, .zip, and .tar.gz; (2) and assemblies in .fa, .fna, .fasta.')
             fx=open('Basalt_log.txt','a')
             fx.write('Input format error! Please check the input file.'+'\n')
-            fx.write('BASALT supports the input (1) sequence files in  .gz, .zip, and .tar.gz; (2) and assemlies in .fa, .fna, .fasta.'+'\n')
+            fx.write('BASALT supports the input (1) sequence files in  .gz, .zip, and .tar.gz; (2) and assemblies in .fa, .fna, .fasta.'+'\n')
             fx.close()
     
     if x > 1:
@@ -500,7 +494,7 @@ def BASALT_main_re_assembly(assembly_list, datasets, num_threads, lr_list, hifi_
                     f_cp_m.write('\n'+'11th did not perform polish')
                     f_cp_m.close()
         except:
-            print('Did not perform the 2nd polish. Skit the step.')
+            print('Did not perform the 2nd polish. Skip the step.')
             f_cp_m=open('Basalt_checkpoint.txt', 'a')
             f_cp_m.write('\n'+'11th 2nd polishing did not perform')
             f_cp_m.close()
@@ -509,7 +503,7 @@ def BASALT_main_re_assembly(assembly_list, datasets, num_threads, lr_list, hifi_
             ### Final de-replication: S4 function
             for line in open('Basalt_checkpoint.txt', 'r'):
                 try:
-                    if '10th reassemblies OLC done':
+                    if '10th reassemblies OLC done' in line:
                         final_folder=str(line).strip().split('\t')[1].strip()
                 except:
                     xyz=0
@@ -617,7 +611,7 @@ def BASALT_main_re_assembly(assembly_list, datasets, num_threads, lr_list, hifi_
         f_cp_m.write('\n'+'BASALT done!')
         f_cp_m.close()
     print('BASALT main program accomplished!')
-    print('BASALT will continue to cleanup or compress all the temp files. The results could be found in folder \'Final_bestbinset\'. Please wait for a little bit longer')
+    print('BASALT will continue to cleanup or compress all the temp files. The results could be found in folder '+repr(str(output_folder))+'. Please wait for a little bit longer')
 
     ### Cleanup
 

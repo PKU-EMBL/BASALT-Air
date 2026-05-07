@@ -22,6 +22,64 @@ elongation, and reassembly in a single coherent workflow.
 
 ## 📣 News
 
+* **[2026/04/30]** 🧰 Extra-binner audit (`-e v` / `-e l`).
+  * VAMB 4.x is pinned to Python 3.11 by bioconda, so the BASALT 3.12
+    base env **cannot install it**. VAMB 5.x is required; BASALT's
+    wrapper now auto-detects the installed VAMB major version at
+    runtime and emits the correct CLI form (`vamb bin default …` for
+    v5, legacy `vamb …` for v4 if you still have it in a separate env).
+  * VAMB 5.x cannot be co-installed with the rest of BASALT's pixi env
+    without breaking the PyTorch graph, so it is **not bundled**. Run
+    `BASALT --check-deps -e v` to verify presence; install in a side
+    env and prepend its `bin/` to `$PATH`.
+  * LorBin is not on conda or PyPI yet — install it from upstream.
+    Output dir / QC paths in BASALT's wrapper now use a consistent
+    lowercase `_100_lorbin_genomes` (was a mix of `LorBin` and
+    `lorbin`, breaking CheckM2 invocation).
+  * Both wrappers now consume **sorted** BAMs (`*_DNA-*_sorted.bam`);
+    they previously fed unsorted BAMs which VAMB 5.x rejects outright.
+  * Removed the dead `from lib2to3.fixes import fix_buffer` import in
+    `s1_autobinners.py` and `s1e_extra_binners.py` — `lib2to3` is
+    deprecated in 3.12 and slated for removal in 3.13.
+  * `s2`/`s6`/`s7` filename-detection chains now recognise the
+    `lorbin` substring so LorBin outputs follow the same `.fa`
+    rename path as MetaBAT2/VAMB.
+* **[2026/04/30]** 🧹 **MetaBinner support removed.** The `-e m` flag is
+  no longer accepted; use `-e v` (VAMB) and/or `-e l` (LorBin) instead,
+  or omit `-e` entirely. Existing `-e m` invocations will now fail fast
+  with a clear error.
+* **[2026/04/30]** 🧰 Usability + rigor pass.
+  * **Absolute paths** in `-a` / `-s` / `-l` / `-hf` / `-d` / `-r` / `-c`
+    are now supported — BASALT auto-symlinks them into the working
+    directory at startup, so you no longer need to `cd data/` first.
+  * **`--workdir DIR`** controls where intermediate files live;
+    **`--outdir DIR`** controls where the final output folder is
+    moved on completion. Defaults preserve the historical
+    cwd-everything behaviour.
+  * **`--version`**, **`--check-deps`**, **`--dry-run`** flags added.
+    `--check-deps` verifies that `bowtie2`, `samtools`, `minimap2`,
+    `metabat2`, `checkm2` (or `checkm`), `blastn`, `spades.py`, `pilon`,
+    `jgi_summarize_bam_contig_depths`, etc. are on `$PATH` before you
+    submit a long job. Honours `-q` and `-e` selection.
+  * **Run manifest** written to `<workdir>/BASALT_run_manifest.json`
+    capturing argv, version, hostname, parameters and resolved inputs
+    at start; `status`, `duration_seconds` and `error` are appended on
+    completion (success *or* failure). Reproducibility-friendly.
+  * **Unified logger** — every CLI/banner message now goes through
+    `basalt.logger`, which dual-writes timestamped lines to stdout
+    **and** `Basalt_log.txt`. **Total elapsed time** is logged at
+    pipeline end, including aborted runs.
+  * **Backend-aware messages** — print/log lines no longer say
+    "checkm" when CheckM2 is the active backend (and vice versa).
+  * **`-s` parser** now accepts absolute-path read pairs via `;` as
+    the pair separator (or as a flat comma list auto-paired by twos),
+    while preserving the legacy `r1.fq,r2.fq/d2_r1.fq,d2_r2.fq`
+    form for backward compatibility.
+  * **Bug fixes** in autobinning / refinement / reassembly format
+    detection (`assembly_list[0]` → per-iter `item`), in S7 contig
+    retrieval (`cutoff0`/`cutoff1` use-before-assign), in S1e
+    LorBin command construction, in S9 long-read SAM cleanup, in
+    S1p bin-pair logic, and several typos in user-visible strings.
 * **[2026/04/28]** ⚡ Hot-path performance overhaul.
   * **Single-pass SAM parsing** in S9 reassembly, S7lr long-read
     polishing and S7p gap-filling. Each SAM is scanned once and
@@ -68,16 +126,18 @@ sequence, then optionally `datafeeding` if `-d` is supplied.
 
 | Input type | Flag | Notes |
 |---|---|---|
-| Short-read assembly | `-a` | Files: `.fa` / `.fna` / `.fasta`, plus `.gz` / `.tar.gz` / `.zip` |
+| Short-read assembly | `-a` | Files: `.fa` / `.fna` / `.fasta`, plus `.gz` / `.tar.gz` / `.zip`. Absolute or relative paths both work — BASALT auto-symlinks into the working directory at startup. |
 | Long-read or hybrid assembly | `-a` | Same formats |
-| Paired-end short reads | `-s` | `r1.fq,r2.fq/d2_r1.fq,d2_r2.fq` (pairs separated by `/`) |
+| Paired-end short reads | `-s` | `r1.fq,r2.fq/d2_r1.fq,d2_r2.fq` (pairs separated by `/`). For absolute paths use `;` instead of `/` between pairs (since `/` collides with directory separators), e.g. `/abs/r1_1.fq,/abs/r1_2.fq;/abs/r2_1.fq,/abs/r2_2.fq`. A flat comma list is also accepted and auto-paired by twos. |
 | Long reads (ONT / PacBio CLR) | `-l` | |
 | PacBio HiFi reads | `-hf` | |
 | Pre-existing binsets to import | `-d` | Triggers the `datafeeding` workflow |
 | Refinement on existing binset | `-r` + `-c` | Run refinement only against an existing bin folder |
 
-> **Note:** BASALT does **not** accept absolute paths in input flags —
-> place all inputs in (or symlink to) the current working directory.
+> **Path note:** absolute paths are now supported in every input flag.
+> BASALT will create a `<basename> -> <absolute target>` symlink in the
+> working directory so the rest of the pipeline (which references files
+> by basename) keeps working unchanged.
 
 ---
 
@@ -331,6 +391,38 @@ BASALT \
 BASALT -a as.fa -s r1.fq,r2.fq -t 32 -m 128 -q checkm
 ```
 
+### Custom workdir + outdir + absolute-path inputs
+
+Run from anywhere; keep bulky intermediates separate from the final binset:
+
+```bash
+BASALT \
+    -a /data/asm1.fa,/data/asm2.fa \
+    -s /data/r1_1.fq,/data/r1_2.fq;/data/r2_1.fq,/data/r2_2.fq \
+    -t 64 -m 128 \
+    -o my_run \
+    --workdir /scratch/my_basalt_work \
+    --outdir  /results/my_basalt_out
+```
+
+* All process / checkpoint / log files land in `--workdir`.
+* When the pipeline finishes, the `<-o>` folder is moved into `--outdir`.
+* Absolute paths are accepted directly — no need to `cd` into a data directory first.
+* `--workdir` defaults to the current directory; `--outdir` defaults to `--workdir` (legacy behaviour).
+
+### Pre-flight check & dry-run
+
+```bash
+# Verify every required external tool is on $PATH (honours -q and -e):
+BASALT --check-deps
+
+# Resolve all inputs/parameters, write the run manifest, then exit:
+BASALT -a asm.fa -s r1.fq,r2.fq --dry-run
+
+# Print version:
+BASALT --version
+```
+
 ---
 
 ## 🎛 CLI options (summary)
@@ -356,8 +448,29 @@ Run `BASALT --help` for the authoritative list. The most-used flags:
 | `--refinepara` | `quick` / `deep` | `quick` |
 | `--min-cpn` | Minimum bin completeness % | `35` |
 | `--max-ctn` | Maximum bin contamination % | `20` |
-| `-e` | Extra binners: `m` = MetaBinner, `v` = VAMB, `l` = LorBin | — |
+| `-e` | Extra binners: `v` = VAMB (≥5; install in a side env), `l` = LorBin (install from upstream). MetaBinner removed in v1.2.x. Run `BASALT --check-deps -e v,l` to verify presence before launching. | — |
 | `-o` | Output folder name | `Final_binset` |
+| `-w` / `--workdir` | Directory for intermediate process files | cwd |
+| `--outdir` | Directory the final output folder is moved to on completion | same as `--workdir` |
+| `-V` / `--version` | Print BASALT version and exit | — |
+| `--check-deps` | Verify required external tools are on `$PATH` and exit (non-zero if any missing) | — |
+| `--dry-run` | Resolve config + write run manifest, then exit before dispatch | — |
+
+---
+
+## 📑 Logging & reproducibility
+
+Every BASALT run produces three machine-readable artefacts in `--workdir`:
+
+| File | What it contains |
+|---|---|
+| `Basalt_log.txt` | Timestamped pipeline log (also streamed to stdout). Driven by the unified `basalt.logger` module — every message is prefixed with `[YYYY-MM-DD HH:MM:SS] [LEVEL]`. |
+| `Basalt_checkpoint.txt` | Resume points used by `--mode continue`. |
+| `BASALT_run_manifest.json` | Full reproducibility manifest. Captures BASALT version, complete `argv`, parsed parameters, normalised inputs, hostname / user / pid / Python version, start time, and on completion: `status` (`success` / `aborted`), `duration_seconds`, `ended_at`, and `error` (if applicable). |
+
+The total elapsed wall-clock is logged at end of every run (success
+*and* failure) as `BASALT pipeline finished in H:MM:SS (123.4 s)` —
+useful for cluster accounting and benchmarking.
 
 ---
 
@@ -421,7 +534,8 @@ compare `OLC_quality_report.tsv` side-by-side.
 
 ```
 basalt/
-├── cli.py                 # `BASALT` entry point
+├── cli.py                 # `BASALT` entry point + dependency check + run manifest
+├── logger.py              # unified stdout + Basalt_log.txt logging facade
 ├── qc_backend.py          # CheckM2 / CheckM unified abstraction
 ├── shell.py               # subprocess wrappers
 ├── core/                  # cross-step utilities (cleanup / data_feeding / final_drep)
@@ -479,10 +593,19 @@ cd "$CONDA_PREFIX/lib"
 ln -s libcrypto.so.1.1 libcrypto.so.1.0.0
 ```
 
-### `IndexError: list index out of range` in argparse
+### Missing external tools
 
-BASALT does **not** accept absolute paths for `-a` / `-s` / `-l` / `-hf`.
-Move (or symlink) all input files into the current working directory.
+If a run dies hours in with errors like `bowtie2: command not found`
+or `checkm2 ... cannot find database`, run the pre-flight check
+**before** submitting next time:
+
+```bash
+BASALT --check-deps
+```
+
+It prints a green `[ OK ]` / red `[MISS]` line for every executable
+BASALT will shell out to (honours `-q checkm` vs `checkm2` and
+`-e m`/`v`/`l` for extra binners).
 
 ### `FileNotFoundError: 'quality_report.tsv'` in `Contig_recruiter_main`
 
@@ -524,9 +647,17 @@ or use HiFi-only via `-hf`.
 > Or import bins via `-d my_binset_folder` for the data-feeding workflow.
 
 > **Q. Where do results go?**
-> A. The current working directory. BASALT does not have a `--out`
-> directory parameter beyond a name suffix. Run BASALT in a clean,
-> dedicated work directory.
+> A. By default, into a `<-o>` folder under the current working directory.
+> Use `--workdir DIR` to direct intermediate files (logs, checkpoints,
+> per-step scratch) to a chosen folder, and `--outdir DIR` to have the
+> final binset moved to a separate location on completion. The legacy
+> "everything in cwd" layout is preserved when neither flag is set.
+
+> **Q. How do I reproduce a previous run?**
+> A. Look at `BASALT_run_manifest.json` in the workdir — it captures
+> the exact `argv`, BASALT version, parameters, hostname and timing of
+> the run. The same command line can be replayed; combine with
+> `--mode new` to start a fresh project.
 
 ---
 

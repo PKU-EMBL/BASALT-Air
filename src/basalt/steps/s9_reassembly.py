@@ -612,7 +612,7 @@ def re_assembly_main(binset_folder, datasets_list, long_read,
                 f.close()
 
                 for i in range(1, n+1):
-                    os.system('rm lr'+str(n)+'.sam')
+                    os.system('rm lr'+str(i)+'.sam')
 
         x=0
         for line in open('Assembly_status.txt','r'):

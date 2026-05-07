@@ -9,7 +9,6 @@ information and runs multiple binners to generate initial binsets
 and PE-based contig connection files.
 """
 
-from lib2to3.fixes import fix_buffer
 from Bio import SeqIO
 import sys, os, time, gc, threading
 import concurrent.futures
@@ -69,7 +68,7 @@ def fq2fa_conversion(filename):
     start=time.time()
     wrerr = sys.stderr.write
     print('---')
-    print("Coverting "+str(filename)+" file to FA file")
+    print("Converting "+str(filename)+" file to FA file")
 
     if '.fq' in str(filename):
         filename1=filename.replace('.fq','')
@@ -1386,9 +1385,9 @@ def autobinners(softwares, assembly_file, depth_file, depth_file_list, Coverage_
                 xyo=0
 
 
-        print('Running checkm with binsets gernerated from autobinner')
+        print('Running '+str(QC)+' with binsets generated from autobinner')
         fb=open('Basalt_log.txt','a')
-        fb.write('Running checkm with binsets gernerated from autobinner'+'\n')
+        fb.write('Running '+str(QC)+' with binsets generated from autobinner'+'\n')
         fb.close()
 
         ### checkm2

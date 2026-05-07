@@ -185,9 +185,10 @@ def _load_checkm_metrics(genome_folder):
     """Load metrics + connection counts from S2-emitted ``_bin_stats_ext.tsv``."""
     pwd=os.getcwd()
     bins_checkm={}
+    backend=_require_backend()
     print(pwd)
     for item in genome_folder:
-        print('Reading checkm results of '+item)
+        print('Reading '+backend.name+' results of '+item)
         try:
             f=open(item+'_genomes/'+item+'_bin_stats_ext.tsv', 'r')
             for line in f:
@@ -204,7 +205,7 @@ def _load_checkm_metrics(genome_folder):
                 bins_checkm[genome_ids]['contig_size']=float(str(line).strip().split('Mean scaffold length\':')[1].split('}')[0].split(',')[0].strip())
                 bins_checkm[genome_ids]['Contamination']=float(str(line).strip().split('Contamination\': ')[1].split('}')[0].split(',')[0].strip())
         except:
-            print('CheckM output file reading error!')
+            print(backend.name+' output file reading error!')
 
         try:
             f=open(item+'_genomes/Bins_total_connections_'+str(item)+'.txt', 'r')
@@ -578,7 +579,7 @@ def _final_dedup_checkm(pos_bins, final_iteration_checkm):
             else:
                 remain_bin[set2]=0; del_bin[set1]=0
         else:
-            if float(set1_marker_score)*float(set1_cpn_ctn) >= float(set2_marker_score)*set2_cpn_ctn:
+            if float(set1_marker_score)*float(set1_cpn_ctn) >= float(set2_marker_score)*float(set2_cpn_ctn):
                 remain_bin[set1]=0; del_bin[set2]=0
             else:
                 remain_bin[set2]=0; del_bin[set1]=0

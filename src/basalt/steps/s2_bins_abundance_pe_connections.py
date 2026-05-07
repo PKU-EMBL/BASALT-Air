@@ -247,7 +247,7 @@ def BinAbundance(depth, cov, covgs, output_format, name_of_the_binning_project,
                 os.system('mv '+path+'_genomes/'+item+'.fasta '+path+'_genomes/'+str(new_name)+'.fa')
             else:
                 os.system('mv '+path+'_genomes/'+str(item)+'.fasta '+path+'_genomes/'+str(item)+'_noclass.txt')
-        elif 'metabinner' in item or 'vamb' in item or 'semibin' in item or 'SingleContig' in item:
+        elif 'vamb' in item or 'lorbin' in item or 'semibin' in item or 'SingleContig' in item:
             genome_name_qz=str(item).split('_genomes.')[0]
             num=str(item).split('_genomes.')[1]
             if int(num) == 0:
@@ -470,7 +470,7 @@ def binsabundance_pe_connections(assembly_binning_group, depth_files,
                 if 'maxbin2' in item2 or 'concoct' in item2:
                     genome_summary[item2], genome_summary2[item2], gen_sum[item2] ={}, {}, []
                     pool.apply_async(multi_threads,args=(pwd, depth_file, coverage_matrix[0], coverage_matrix[1], 'fasta', item2, genome_summary[item2], genome_summary2[item2], gen_sum[item2], PE_connections_file))
-                elif 'metabat' in item2 or 'metabinner' in item2 or 'vamb' in item2 or 'semibin' in item2 or 'SingleContig' in item2:
+                elif 'metabat' in item2 or 'vamb' in item2 or 'lorbin' in item2 or 'semibin' in item2 or 'SingleContig' in item2:
                     genome_summary[item2], genome_summary2[item2], gen_sum[item2] ={}, {}, []
                     pool.apply_async(multi_threads,args=(pwd, depth_file, coverage_matrix[0], coverage_matrix[1], 'fa', item2, genome_summary[item2], genome_summary2[item2], gen_sum[item2], PE_connections_file))
                 else:
@@ -499,7 +499,7 @@ def binsabundance_pe_connections(assembly_binning_group, depth_files,
 
 if __name__ == '__main__':
     set_qc_backend('checkm2')
-    assembly_binning_group={'1':['1_assembly_sample1.fa_metabinner']}
+    assembly_binning_group={'1':['1_assembly_sample1.fa_vamb']}
     depth_files={'1':'1_assembly.depth.txt'}
     PE_connections_files={'1':'condense_connections_assembly_sample1.fa.txt'}
     assembly_names={'1':'1_assembly_sample1.fa'}

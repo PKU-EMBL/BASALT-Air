@@ -13,8 +13,11 @@ import time
 import sys
 import os
 import argparse
+import shutil
 import warnings
 from glob import glob
+
+from basalt.logger import setup_logger, get_logger, format_elapsed
 
 try:
     from sklearn.exceptions import EfficiencyWarning
@@ -26,11 +29,47 @@ except ImportError:
 # ---------------------------------------------------------------------------
 # Argument parsing
 # ---------------------------------------------------------------------------
-parser = argparse.ArgumentParser(description='BASALT')
+_USAGE_EXAMPLES = """
+examples
+--------
+
+  # Single-sample binning, paired-end short reads, CheckM2 QC (default):
+  basalt -a assembly.fa -s r1.fq,r2.fq -t 32 -m 64 -o my_run
+
+  # Multi-sample with absolute paths (use ';' to separate read pairs):
+  basalt -a /data/asm1.fa,/data/asm2.fa \\
+         -s /data/r1_1.fq,/data/r1_2.fq;/data/r2_1.fq,/data/r2_2.fq \\
+         --workdir /scratch/work --outdir /results -o multi_sample
+
+  # Hybrid assembly + long reads:
+  basalt -a asm.fa -s r1.fq,r2.fq -l ont.fq -hf hifi.fq -t 64 -m 128
+
+  # Re-run only the refinement module on existing binsets:
+  basalt -r my_binset -c coverage.txt --module refinement -t 32
+
+  # Verify external tools are installed before launching:
+  basalt --check-deps
+
+  # Preview the resolved configuration without running anything:
+  basalt -a asm.fa -s r1.fq,r2.fq --dry-run
+"""
+
+parser = argparse.ArgumentParser(
+    prog='basalt',
+    description='BASALT: metagenomic binning, refinement, and reassembly pipeline.',
+    epilog=_USAGE_EXAMPLES,
+    formatter_class=argparse.RawDescriptionHelpFormatter,
+)
+parser.add_argument('-V', '--version', action='version',
+                    version='%(prog)s ' + __import__('basalt').__version__)
+parser.add_argument('--check-deps', action='store_true', dest='check_deps',
+                    help='Check that required external tools (bowtie2, samtools, minimap2, metabat2, checkm2/checkm, blastn, ...) are on PATH and exit. Useful before submitting a long job.')
+parser.add_argument('--dry-run', action='store_true', dest='dry_run',
+                    help='Resolve all inputs/parameters, write the run manifest, then exit before running the pipeline. Useful to validate a command-line.')
 parser.add_argument('-a', '--assemblies', type=str, dest='assemblies',
                     help='List of assemblies, e.g.: as1.fa,as2.fa')
 parser.add_argument('-s', '--shortreads', type=str, dest='sr_datasets',
-                    help='List of paired-end reads, e.g.: r1_1.fq,r1_2.fq/r2_1.fq,r2_2.fq (paried_ends reads need \'/\' to seperate)')
+                    help='List of paired-end reads. Each pair is "mate1,mate2". Multiple pairs are separated by "/" or ";" (use ";" if any path is absolute, since "/" collides with directory separators). e.g.: r1_1.fq,r1_2.fq/r2_1.fq,r2_2.fq  or  /abs/r1_1.fq,/abs/r1_2.fq;/abs/r2_1.fq,/abs/r2_2.fq')
 parser.add_argument('-l', '--longreads', type=str, dest='long_datasets',
                     help='Including ont and pb dataset, excluding hifi dataset. List of long reads, e.g.: lr1.fq,lr2.fq')
 parser.add_argument('-hf', '--hifi', type=str, dest='hifi_datasets',
@@ -42,9 +81,13 @@ parser.add_argument('-t','--threads', type=int, dest='threads', default=4,
 parser.add_argument('-m','--ram', type=int, dest='ram', default=32,
                     help='Number of ram, minimum ram suggested: 32G')
 parser.add_argument('-e','--extra_binner', type=str, dest='extra_binner',
-                    help='Extra binner for binning: m: metabinner, v: vamb, l: lorbin; for instance: -e m, means BASALT will use metabinner for binning besides metabat2, maxbin2, and concoct')
+                    help='Extra binner(s) to run alongside metabat2, maxbin2 and concoct. v: vamb, l: lorbin. e.g. -e v or -e v,l')
 parser.add_argument('-o','--out', type=str, dest='output_folder_name', default='Final_binset',
                     help='Name of the output folder. For binning, E.g. -o Anammox. BASALT would put those bins into folder Anammox_final_binset; for data feeding, e.g. -o Anammox; output files will under the folder of Anammox_data_feeded')
+parser.add_argument('-w','--workdir', type=str, dest='workdir', default=None,
+                    help='Directory for intermediate process files. Default: current directory. BASALT will create it if missing and chdir into it before running.')
+parser.add_argument('--outdir', type=str, dest='outdir', default=None,
+                    help='Directory where the final output folder is moved to once the pipeline finishes. Default: same as --workdir (output stays alongside intermediates).')
 parser.add_argument('-q','--quality-check', type=str, dest='quality_check', default='checkm2', 
                     help='Chance checkm version, default: checkm2; you may use: \'-q checkm\' to specify checkm for quality check when running BASALT')
 parser.add_argument('--min-cpn', type=int, dest='Min_completeness', default=35,
@@ -121,10 +164,264 @@ def _fail(msg):
     sys.exit(1)
 
 
+# ---------------------------------------------------------------------------
+# Dependency check
+# ---------------------------------------------------------------------------
+
+# Tools that are essentially always invoked.
+_DEPS_CORE = [
+    'bowtie2', 'bowtie2-build', 'samtools', 'minimap2',
+    'blastn', 'makeblastdb',
+    'metabat2', 'run_MaxBin.pl', 'concoct',
+    'jgi_summarize_bam_contig_depths',
+    'spades.py', 'pilon', 'perl',
+]
+_DEPS_QC = {'checkm2': ['checkm2'], 'checkm': ['checkm']}
+_DEPS_EXTRA_BINNER = {'v': ['vamb'], 'l': ['LorBin']}
+
+
+def _which(name):
+    return shutil.which(name)
+
+
+def _check_dependencies(qc_software='checkm2', extra_binners=()):
+    """Return (missing, present) lists for the active tool set."""
+    needed = list(_DEPS_CORE)
+    needed += _DEPS_QC.get(qc_software, [])
+    for code in extra_binners or ():
+        needed += _DEPS_EXTRA_BINNER.get(code, [])
+    seen, ordered = set(), []
+    for t in needed:
+        if t not in seen:
+            seen.add(t)
+            ordered.append(t)
+    missing = [t for t in ordered if _which(t) is None]
+    present = [t for t in ordered if _which(t) is not None]
+    return missing, present
+
+
+def _print_dep_report(qc_software, extra_binners):
+    missing, present = _check_dependencies(qc_software, extra_binners)
+    print('Dependency check (QC backend: {}, extra binners: {}):'.format(
+        qc_software, list(extra_binners) or 'none'))
+    for t in present:
+        print('  [ OK ] {} -> {}'.format(t, _which(t)))
+    for t in missing:
+        print('  [MISS] {}'.format(t))
+    return missing
+
+
+# ---------------------------------------------------------------------------
+# Run manifest (reproducibility)
+# ---------------------------------------------------------------------------
+
+def _build_manifest(args_namespace, resolved):
+    """Capture argv, version, host, params and start time as a dict."""
+    import getpass
+    import platform
+    import socket
+    from basalt import __version__ as _v
+
+    return {
+        'basalt_version': _v,
+        'argv': list(sys.argv),
+        'cwd_at_invocation': os.getcwd(),
+        'workdir': resolved.get('workdir'),
+        'outdir': resolved.get('outdir'),
+        'parameters': vars(args_namespace),
+        'normalised_inputs': {
+            'assemblies': resolved.get('assemblies'),
+            'short_reads': resolved.get('short_reads'),
+            'long_reads': resolved.get('long_reads'),
+            'hifi_reads': resolved.get('hifi_reads'),
+            'extra_binner': resolved.get('extra_binner'),
+            'coverage_list': resolved.get('coverage_list'),
+            'binsets_list': resolved.get('binsets_list'),
+            'data_feeding_folder': resolved.get('data_feeding_folder'),
+            'refinement_binset': resolved.get('refinement_binset'),
+        },
+        'host': {
+            'hostname': socket.gethostname(),
+            'platform': platform.platform(),
+            'python': sys.version.split()[0],
+            'user': getpass.getuser(),
+            'pid': os.getpid(),
+        },
+        'started_at': time.strftime('%Y-%m-%dT%H:%M:%S%z'),
+        'started_at_epoch': time.time(),
+    }
+
+
+def _write_manifest(manifest, workdir):
+    import json
+    path = os.path.join(workdir, 'BASALT_run_manifest.json')
+    try:
+        with open(path, 'w') as fh:
+            json.dump(manifest, fh, indent=2, default=str)
+    except OSError as e:
+        sys.stderr.write(
+            '[BASALT] WARNING: could not write run manifest {!r}: {}\n'.format(path, e))
+    return path
+
+
+def _finalise_manifest(path, status, elapsed_seconds, error=None):
+    """Append end_status / duration to the manifest written at start."""
+    import json
+    try:
+        with open(path) as fh:
+            data = json.load(fh)
+    except (OSError, ValueError):
+        return
+    data['ended_at'] = time.strftime('%Y-%m-%dT%H:%M:%S%z')
+    data['duration_seconds'] = round(float(elapsed_seconds), 3)
+    data['status'] = status
+    if error is not None:
+        data['error'] = str(error)
+    try:
+        with open(path, 'w') as fh:
+            json.dump(data, fh, indent=2, default=str)
+    except OSError:
+        pass
+
+
 def _check_files_exist(paths, label):
     missing = [p for p in paths if p and not os.path.isfile(p)]
     if missing:
         _fail('{} file(s) not found: {}'.format(label, ', '.join(missing)))
+
+
+def _parse_paired_reads(value):
+    """Parse the -s/--shortreads value into ``{idx: [mate1, mate2]}``.
+
+    Supports three forms:
+      * legacy '/'-separated pair groups, e.g. ``a,b/c,d``;
+      * ';'-separated pair groups (use this when paths are absolute, since
+        '/' collides with the filesystem separator), e.g. ``/x/a,/x/b;/x/c,/x/d``;
+      * a flat comma list — auto-paired by twos — used when '/' would
+        collide with absolute paths and no ';' was given.
+    Empty or missing input yields an empty dict (callers may dispatch a
+    flow that needs no short reads).
+    """
+    if not value:
+        return {}
+    text = str(value).strip()
+    if not text:
+        return {}
+
+    if ';' in text:
+        groups = [g.strip() for g in text.split(';') if g.strip()]
+    elif '/' in text and not text.lstrip().startswith('/'):
+        # Legacy form: "a,b/c,d". Only safe when no token is absolute.
+        groups = [g.strip() for g in text.split('/') if g.strip()]
+    else:
+        # Either no separator at all (single pair "a,b") or the input
+        # contains absolute paths whose '/' would corrupt a '/'-split.
+        # Treat as a flat comma list and pair adjacent items.
+        tokens = [t.strip() for t in text.split(',') if t.strip()]
+        if len(tokens) % 2 != 0:
+            _fail('--shortreads must list an even number of files when '
+                  'pairs are not delimited by "/" or ";"; got {} file(s)'
+                  .format(len(tokens)))
+        groups = [','.join(tokens[i:i + 2]) for i in range(0, len(tokens), 2)]
+
+    pairs = {}
+    for n, item in enumerate(groups, start=1):
+        files = [x.strip() for x in item.split(',') if x.strip()]
+        if len(files) != 2:
+            _fail('--shortreads pair {} must have exactly 2 files; got: {!r}'
+                  .format(n, item))
+        pairs[str(n)] = files
+    return pairs
+
+
+def _link_into_cwd(path):
+    """Make ``path`` reachable as a bare filename in the current directory.
+
+    Downstream BASALT modules reference inputs by basename (e.g.
+    ``pwd + '/' + name``, ``unzip name``, ``os.chdir(name)``), so absolute
+    or sub-directory paths are normalised here by symlinking them into cwd
+    and returning the link's basename. Bare filenames pass through unchanged.
+    """
+    if not path:
+        return path
+    has_sep = (os.sep in path) or (os.altsep is not None and os.altsep in path)
+    if not has_sep:
+        return path
+    abs_path = os.path.abspath(os.path.expanduser(path))
+    name = os.path.basename(abs_path.rstrip(os.sep))
+    if not name:
+        return path
+    cwd = os.getcwd()
+    link = os.path.join(cwd, name)
+    if os.path.realpath(link) == abs_path:
+        return name
+    if os.path.lexists(link):
+        if os.path.islink(link):
+            try:
+                os.unlink(link)
+            except OSError as e:
+                _fail('cannot replace stale symlink {!r}: {}'.format(link, e))
+        else:
+            sys.stderr.write(
+                '[BASALT] WARNING: cwd already contains {!r}; '
+                'using it instead of {!r}\n'.format(name, abs_path))
+            return name
+    try:
+        os.symlink(abs_path, link)
+    except OSError as e:
+        _fail('failed to symlink {!r} -> {!r}: {}'.format(link, abs_path, e))
+    return name
+
+
+def _normalize_paths_to_cwd():
+    """Symlink every path-bearing input into cwd so the rest of the pipeline,
+    which assumes bare filenames in the working directory, keeps working
+    when the user passes absolute or sub-directory paths."""
+    global assembly_list, lr_list, hifi_list, hic_list
+    global datasets, coverage_list, binsets_list
+    global data_feeding_folder, refinement_binset
+
+    assembly_list = [_link_into_cwd(p) for p in assembly_list]
+    lr_list = [_link_into_cwd(p) for p in lr_list]
+    hifi_list = [_link_into_cwd(p) for p in hifi_list]
+    hic_list = [_link_into_cwd(p) for p in hic_list]
+    coverage_list = [_link_into_cwd(p) for p in coverage_list]
+    for k, pair in list(datasets.items()):
+        datasets[k] = [_link_into_cwd(pair[0]), _link_into_cwd(pair[1])]
+
+    data_feeding_folder = [_link_into_cwd(p) for p in data_feeding_folder]
+    binsets_list = [_link_into_cwd(p) for p in binsets_list]
+    if refinement_binset:
+        refinement_binset = _link_into_cwd(refinement_binset)
+
+
+def _move_output_to_outdir():
+    """Move the produced output folder from workdir to outdir.
+
+    The pipeline writes its final binset to ``<workdir>/<output_folder>``.
+    When ``--outdir`` was supplied (and differs from workdir), relocate that
+    folder so users can keep bulky intermediates separate from results.
+    """
+    src = os.path.join(workdir, output_folder)
+    if not os.path.isdir(src):
+        sys.stderr.write(
+            '[BASALT] WARNING: expected output folder {!r} not found in '
+            'workdir; nothing to move to --outdir\n'.format(output_folder))
+        return
+    dst = os.path.join(outdir, output_folder)
+    if os.path.exists(dst):
+        sys.stderr.write(
+            '[BASALT] WARNING: --outdir already contains {!r}; left output '
+            'in workdir at {!r}\n'.format(output_folder, src))
+        return
+    try:
+        shutil.move(src, dst)
+    except (OSError, shutil.Error) as e:
+        sys.stderr.write(
+            '[BASALT] WARNING: could not move {!r} to {!r}: {}; left in '
+            'workdir\n'.format(src, dst, e))
+        return
+    print('Final output moved to', dst)
 
 
 def validate_inputs():
@@ -169,13 +466,14 @@ def validate_inputs():
     if functional_module not in ('all', 'autobinning', 'refinement', 'reassembly'):
         _fail('--module must be all/autobinning/refinement/reassembly; got {!r}'.format(functional_module))
 
-    # Output folder: verify parent directory is writable (BASALT suffixes
-    # the stem itself, e.g. {stem}_final_binset, so don't pre-create it).
-    out_parent = os.path.dirname(os.path.abspath(output_folder)) or '.'
-    if not os.path.isdir(out_parent):
-        _fail('output folder parent {!r} does not exist'.format(out_parent))
-    if not os.access(out_parent, os.W_OK):
-        _fail('output folder parent {!r} is not writable'.format(out_parent))
+    # -e/--extra_binner: only 'v' (VAMB) and 'l' (LorBin) are supported.
+    # 'm' (MetaBinner) was removed in v1.2.x.
+    for code in (eb_list or []):
+        if code == 'm':
+            _fail("MetaBinner ('-e m') is no longer supported. Use '-e v' (VAMB) "
+                  "and/or '-e l' (LorBin) instead, or omit -e entirely.")
+        if code not in ('v', 'l'):
+            _fail("--extra_binner code must be 'v' (vamb) or 'l' (lorbin); got {!r}".format(code))
 
 
 # validate_inputs() invoked inside main()
@@ -297,8 +595,20 @@ def main():
     global functional_module, refinement_paramter, output_folder, sensitivity
     global data_feeding_folder, binsetindex, refinement_binset, coverage_list
     global binsets_list, datasets, assembly_list, lr_list, hic_list, eb_list, pwd
+    global workdir, outdir
 
     args = parser.parse_args()
+
+    # --check-deps: verify external tools are on PATH and exit (0 if all
+    # found, 1 if any missing). Honours the QC backend and -e selection so
+    # users only check what's actually needed for their planned run.
+    if getattr(args, 'check_deps', False):
+        eb_codes = []
+        if args.extra_binner:
+            eb_codes = [c.strip() for c in args.extra_binner.split(',') if c.strip()]
+        missing = _print_dep_report(args.quality_check, eb_codes)
+        sys.exit(1 if missing else 0)
+
     # Re-run all the setup performed at module level previously, now using
     # the freshly-parsed args:
     assemblies = args.assemblies
@@ -315,6 +625,8 @@ def main():
     functional_module = args.functional_module
     refinement_paramter = args.refinement_paramter
     output_folder = args.output_folder_name
+    workdir = args.workdir
+    outdir = args.outdir
     sensitivity = args.binning_sensitive
     data_feeding_folder = args.data_feeding_folder
     binsetindex = args.extra_binset_start_index
@@ -323,14 +635,7 @@ def main():
     binsets_list = args.binsets_list
 
     # Parse and normalise input lists.
-    try:
-        datasets_list = sr_datasets.split('/')
-        datasets = {}
-        for n, item in enumerate(datasets_list, start=1):
-            pr = str(item).strip().split(',')
-            datasets[str(n)] = [pr[0].strip(), pr[1].strip()]
-    except Exception:
-        datasets = {}
+    datasets = _parse_paired_reads(sr_datasets)
     try:
         assembly_list = assemblies.split(',')
     except Exception:
@@ -363,32 +668,123 @@ def main():
 
     validate_inputs()
 
-    pwd = os.getcwd()
-    print('Processing assemblies:', str(assembly_list))
-    print('Processing short-reads:', str(datasets))
-    print('Processing long-reads:', str(lr_list))
-    print('Processing hifi-reads:', str(hifi_list))
-    print('Processing Hi-C reads:', str(hic_list))
-    print('Output folder name will be:', str(output_folder))
-    print('Process with extra binner:', str(eb_list))
-    print('Quality check software:', str(QC_software))
-    print('Binning sensitivity:', str(sensitivity))
-    print('Processing with:', str(num_threads), 'threads')
-    print('Processing with:', str(ram), 'G')
-    print('Running status:', str(continue_mode))
-    print('Binning module:', str(functional_module))
-    print('Min completeness:', str(min_cpn))
-    print('Max contamination:', str(max_ctn))
-    print('Refinement parameter:', str(refinement_paramter))
-    print('Extra binset(s) for data feeding:', str(data_feeding_folder))
-    print('Refinement binset:', str(refinement_binset))
-    print('List of coverage file(s):', str(coverage_list))
-    print('Binset(s) list:', str(binsets_list))
+    # Allow path-bearing -o for backward compat: split into outdir + basename.
+    if output_folder:
+        _od, _bn = os.path.split(output_folder)
+        if _od:
+            if outdir is None:
+                outdir = _od
+            output_folder = _bn or 'Final_binset'
+
+    # Resolve workdir (where intermediate process files live) and chdir into
+    # it so the rest of the pipeline — which assumes cwd is the work dir —
+    # keeps working unchanged.
+    if workdir:
+        workdir = os.path.abspath(os.path.expanduser(workdir))
+        try:
+            os.makedirs(workdir, exist_ok=True)
+        except OSError as e:
+            _fail('cannot create --workdir {!r}: {}'.format(workdir, e))
+        os.chdir(workdir)
+    else:
+        workdir = os.getcwd()
+    if not os.access(workdir, os.W_OK):
+        _fail('working directory {!r} is not writable'.format(workdir))
+
+    # Resolve outdir (where the final output folder is moved to). Defaults
+    # to workdir, in which case no post-pipeline move happens.
+    if outdir:
+        outdir = os.path.abspath(os.path.expanduser(outdir))
+        try:
+            os.makedirs(outdir, exist_ok=True)
+        except OSError as e:
+            _fail('cannot create --outdir {!r}: {}'.format(outdir, e))
+        if not os.access(outdir, os.W_OK):
+            _fail('--outdir {!r} is not writable'.format(outdir))
+    else:
+        outdir = workdir
+
+    pwd = workdir
+    _normalize_paths_to_cwd()
+
+    # Configure the unified logger now that workdir is final. This makes
+    # `Basalt_log.txt` land in the workdir alongside the existing manual writes.
+    setup_logger(os.path.join(workdir, 'Basalt_log.txt'))
+    log = get_logger()
+
+    log.info('Processing assemblies: %s', assembly_list)
+    log.info('Processing short-reads: %s', datasets)
+    log.info('Processing long-reads: %s', lr_list)
+    log.info('Processing hifi-reads: %s', hifi_list)
+    log.info('Processing Hi-C reads: %s', hic_list)
+    log.info('Output folder name will be: %s', output_folder)
+    log.info('Working directory (intermediate files): %s', workdir)
+    log.info('Final output directory: %s', outdir)
+    log.info('Process with extra binner: %s', eb_list)
+    log.info('Quality check software: %s', QC_software)
+    log.info('Binning sensitivity: %s', sensitivity)
+    log.info('Processing with: %s threads', num_threads)
+    log.info('Processing with: %s G', ram)
+    log.info('Running status: %s', continue_mode)
+    log.info('Binning module: %s', functional_module)
+    log.info('Min completeness: %s', min_cpn)
+    log.info('Max contamination: %s', max_ctn)
+    log.info('Refinement parameter: %s', refinement_paramter)
+    log.info('Extra binset(s) for data feeding: %s', data_feeding_folder)
+    log.info('Refinement binset: %s', refinement_binset)
+    log.info('List of coverage file(s): %s', coverage_list)
+    log.info('Binset(s) list: %s', binsets_list)
 
     if continue_mode == 'continue':
         continue_mode = 'last'
 
-    _dispatch()
+    # Auto dependency check before any work — fail fast with a clear list of
+    # missing executables instead of dying mid-pipeline with a cryptic error.
+    missing_deps, _ = _check_dependencies(QC_software, eb_list)
+    if missing_deps:
+        log.warning(
+            'Missing external tools on PATH: %s. Run "basalt --check-deps" '
+            'for the full report. Continuing — failures will surface when '
+            'BASALT shells out to the missing tool.',
+            ', '.join(missing_deps),
+        )
+
+    # Reproducibility: capture argv, version, host, parameters, timing.
+    manifest = _build_manifest(args, {
+        'workdir': workdir, 'outdir': outdir,
+        'assemblies': assembly_list, 'short_reads': datasets,
+        'long_reads': lr_list, 'hifi_reads': hifi_list,
+        'extra_binner': eb_list, 'coverage_list': coverage_list,
+        'binsets_list': binsets_list,
+        'data_feeding_folder': data_feeding_folder,
+        'refinement_binset': refinement_binset,
+    })
+    manifest_path = _write_manifest(manifest, workdir)
+    log.info('Run manifest written: %s', manifest_path)
+
+    if getattr(args, 'dry_run', False):
+        log.info('--dry-run: configuration validated; exiting before _dispatch()')
+        return
+
+    t_start = time.monotonic()
+    log.info('BASALT pipeline started')
+    try:
+        _dispatch()
+
+        if outdir != workdir:
+            _move_output_to_outdir()
+    except BaseException as exc:
+        elapsed = time.monotonic() - t_start
+        log.error(
+            'BASALT pipeline aborted after %s (%s: %s)',
+            format_elapsed(elapsed), type(exc).__name__, exc,
+        )
+        _finalise_manifest(manifest_path, 'aborted', elapsed, error=exc)
+        raise
+    else:
+        elapsed = time.monotonic() - t_start
+        log.info('BASALT pipeline finished in %s (%.1f s)', format_elapsed(elapsed), elapsed)
+        _finalise_manifest(manifest_path, 'success', elapsed)
 
 
 if __name__ == '__main__':

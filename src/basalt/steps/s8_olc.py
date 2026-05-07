@@ -2216,7 +2216,7 @@ def OLC_main_checkm(target_bin_folder, step, bin_comparison_folder,
             num_projects=delta
             pool=Pool(processes=num_projects)
 
-        print('Processing bins with '+str())
+        print('Processing bins with '+str(num_projects)+' projects')
         for item in bestbinset_sim_bin:
         # for item in bestbinset_sim_bin_d[i]:
             if item not in accomplished_bins.keys():

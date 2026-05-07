@@ -177,10 +177,10 @@ def depth_eval(file_seqs_record, depth_file, pair_bins, bin_folder):
         f.write('\t'+'Bin1 total cov-'+str(i)+'\t'+'Bin1 avg. cov-'+str(i)+'\t'+'Bin2 total cov-'+str(i)+'\t'+'Bin2 avg. cov-'+str(i)+'\t'+'Var(%)')
     f.write('\n')
 
-    bin1_depth, bin2_depth = {}, {}
     for bin1 in pair_bins.keys():
         bin2=pair_bins[bin1]
         f.write(str(bin1)+'\t'+str(bin2))
+        bin1_depth, bin2_depth = {}, {}
 
         x=0
         for contig in file_seqs_record[bin1]:
@@ -221,12 +221,12 @@ def depth_eval(file_seqs_record, depth_file, pair_bins, bin_folder):
             name_list.remove(name_list[-1])
             bin_folder_checkm='_'.join(name_list)+'_checkm'
             checkm=parse_checkm(bin_folder_checkm)
-            bin1_tax=bin_folder_checkm[bin1]['lineage']
-            bin2_tax=bin_folder_checkm[bin2]['lineage']
-            bin1_cmp=bin_folder_checkm[bin1]['completeness']
-            bin1_ctn=bin_folder_checkm[bin1]['contamination']
-            bin2_cmp=bin_folder_checkm[bin2]['completeness']
-            bin2_ctn=bin_folder_checkm[bin1]['contamination']
+            bin1_tax=checkm[bin1]['lineage']
+            bin2_tax=checkm[bin2]['lineage']
+            bin1_cmp=checkm[bin1]['completeness']
+            bin1_ctn=checkm[bin1]['contamination']
+            bin2_cmp=checkm[bin2]['completeness']
+            bin2_ctn=checkm[bin2]['contamination']
             f2.write(bin1+'\t'+bin1_tax+'\t'+bin1_cmp+'\t'+bin1_ctn+'\t'+bin2+'\t'+bin2_tax+'\t'+bin2_cmp+'\t'+bin2_ctn+'\n')
             cmp_sum=bin1_cmp+bin2_cmp
             if cmp_sum <= 105 and bin1_tax == bin2_tax:

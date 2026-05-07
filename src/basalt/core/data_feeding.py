@@ -510,7 +510,7 @@ def data_feeding(extra_binset, datasets, start_index, num_threads,
             print('----------')
 
             os.chdir(str(mod_extra_binset[i])+'_checkm')
-            print('Parsing '+str(mod_extra_binset[i])+' checkm output')
+            print('Parsing '+str(mod_extra_binset[i])+' checkm2 output')
             
             checkm, n = {}, 0
             for line in open('quality_report.tsv','r'):

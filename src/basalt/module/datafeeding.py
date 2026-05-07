@@ -131,17 +131,11 @@ def data_feeding_main(assembly_list, datasets, num_threads, data_feeding_folder,
         fx.write('BASALT started from 1st step'+'\n')
         fx.write('Assemblies: '+str(str(assembly_list).replace('[','').replace(']','').replace(' ','').replace('\'',''))+'\n')
         fx.write('Datasets: ')
-        datasets_list=datasets.split(',')
-        x=0
-        for ds in datasets_list:
-            x+=1
-            ds1=str(ds).split('[')[1].replace('\'','').replace(']','').replace(' ','')
-            if x == 1:
-                f.write(str(ds1))
-                fx.write(str(ds1))
-            else:
-                f.write('/'+str(ds1))
-                fx.write('/'+str(ds1))
+        for n_pair, ds_key in enumerate(datasets, start=1):
+            pair = ','.join(datasets[ds_key])
+            sep = '' if n_pair == 1 else '/'
+            f.write(sep + pair)
+            fx.write(sep + pair)
         f.write('\n')
         fx.write('\n')
 
