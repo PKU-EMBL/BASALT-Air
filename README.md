@@ -1,4 +1,4 @@
-# BASALT — Binning Across a Series of Assemblies Toolkit
+# BASALT-Air — Binning Across a Series of Assemblies Toolkit Air Version
 
 ```
  ____    _    ____    _    _   _____
@@ -9,7 +9,7 @@
        Metagenomic binning & refinement pipeline
 ```
 
-BASALT is a versatile, modular pipeline that produces high-quality
+BASALT-Air is a lighted, versatile, modular pipeline that produces high-quality
 metagenome-assembled genomes (MAGs) from short reads, long reads, hybrid
 assemblies, and pre-existing binsets. It runs autobinning, multi-assembly
 dereplication, deep-learning–based outlier removal, contig retrieval, OLC
@@ -22,6 +22,11 @@ elongation, and reassembly in a single coherent workflow.
 
 ## 📣 News
 
+* **[2026/05/18]** 🔧 **Configuration improvements for easier setup.**
+  * **User-configurable paths:** `pixi.toml` now uses placeholder paths (`/path/to/...`) instead of hardcoded personal paths. Users must edit `BASALT_WEIGHT` and `CHECKM2DB` in `pixi.toml` before running `pixi install`. See the updated installation section for detailed instructions.
+  * **CUDA version flexibility:** Added clear comments in `pixi.toml` explaining how to adjust the CUDA version (line 13) to match your system (`"11"`, `"12"`, or `"13"`).
+  * **libopenblas dependency:** Explicitly added `libopenblas` to dependencies to prevent BLAS-related runtime errors.
+  * **Improved documentation:** Installation section now includes step-by-step configuration guide with examples for Linux and macOS, CUDA version adjustment instructions, and expanded troubleshooting section.
 * **[2026/04/30]** 🧰 Extra-binner audit (`-e v` / `-e l`).
   * VAMB 4.x is pinned to Python 3.11 by bioconda, so the BASALT 3.12
     base env **cannot install it**. VAMB 5.x is required; BASALT's
@@ -158,31 +163,83 @@ Pixi replaces steps 1–4 of the manual workflow below. You get the conda
 env, the editable BASALT install, and the activation-time env vars
 (`BASALT_WEIGHT`, `CHECKM2DB`) all from one declarative file.
 
-```bash
-# 1. Install pixi (skip if already installed)
-curl -fsSL https://pixi.sh/install.sh | sh
+#### Step 1: Install pixi
 
-# 2. Clone and resolve the environment
-git clone https://github.com/EMBL-PKU/BASALT.git
-cd BASALT
-pixi install
+```bash
+curl -fsSL https://pixi.sh/install.sh | sh
 ```
 
-Before first run, edit the two paths in `pixi.toml` under
-`[activation.env]` to match your filesystem:
+#### Step 2: Clone the repository
+
+```bash
+git clone https://github.com/EMBL-PKU/BASALT.git
+cd BASALT
+```
+
+#### Step 3: Configure paths (REQUIRED before installation)
+
+> ⚠️ **IMPORTANT:** You **MUST** edit `pixi.toml` before running `pixi install`.
+
+Open `pixi.toml` and modify the `[activation.env]` section (around lines 78-87) to match your filesystem:
 
 ```toml
 [activation.env]
-BASALT_WEIGHT = "/path/to/basalt_weights"
-CHECKM2DB     = "/path/to/checkm2db/CheckM2_database/uniref100.KO.1.dmnd"
-# CHECKM_DATA_PATH = "/path/to/checkmdb"   # only if running -q checkm
+BASALT_WEIGHT = "/your/actual/path/to/basalt_weights"        # CHANGE THIS
+CHECKM2DB     = "/your/actual/path/to/checkm2db/CheckM2_database/uniref100.KO.1.dmnd"  # CHANGE THIS
+# CHECKM_DATA_PATH = "/your/actual/path/to/checkmdb"   # CHANGE THIS if running -q checkm
 ```
 
-Then download the model weights and the CheckM2 database once:
+**Example configurations:**
+
+```toml
+# Linux example
+BASALT_WEIGHT = "/home/username/basalt_weights"
+CHECKM2DB     = "/home/username/databases/checkm2db/CheckM2_database/uniref100.KO.1.dmnd"
+
+# macOS example
+BASALT_WEIGHT = "/Users/username/basalt_weights"
+CHECKM2DB     = "/Users/username/databases/checkm2db/CheckM2_database/uniref100.KO.1.dmnd"
+```
+
+**Optional: Adjust CUDA version**
+
+If your system uses a different CUDA version, modify the `[system-requirements]` section (around line 13):
+
+```toml
+[system-requirements]
+cuda = "12"  # Change to "11" or "13" based on your CUDA version
+```
+
+Check your CUDA version with:
+```bash
+nvidia-smi  # Look at "CUDA Version" in the top-right
+# or
+nvcc --version
+```
+
+**For CPU-only systems:**
+
+If you don't have a GPU, edit `pixi.toml`:
+1. Remove or comment out the `[system-requirements]` section
+2. Change `pytorch-gpu = "*"` to `pytorch-cpu = "*"` in the `[dependencies]` section
+
+#### Step 4: Install the environment
 
 ```bash
-pixi run download-weights     # → $BASALT_WEIGHT
-pixi run checkm2-db           # CheckM2 DIAMOND DB (≈3 GB)
+pixi install
+```
+
+This will:
+- Create a conda environment with Python 3.12
+- Install all bioinformatics tools (metabat2, checkm2, bowtie2, etc.)
+- Install BASALT in editable mode
+- Set up environment variables
+
+#### Step 5: Download model weights and databases
+
+```bash
+pixi run download-weights     # Downloads BASALT DL models (~100 MB) → $BASALT_WEIGHT
+pixi run checkm2-db           # Downloads CheckM2 DIAMOND DB (~3 GB) → directory containing $CHECKM2DB
 ```
 
 #### Use the env
@@ -201,6 +258,43 @@ pixi run BASALT --help
 `pixi shell` / `pixi run` automatically export `BASALT_WEIGHT` and
 `CHECKM2DB`, so you don't need to touch `~/.bashrc`. From any working
 directory you can simply call `BASALT …`.
+
+#### Verify installation
+
+```bash
+pixi shell
+
+# Check BASALT version
+BASALT --version
+
+# Verify all dependencies are installed
+BASALT --check-deps
+
+# Check environment variables
+echo $BASALT_WEIGHT
+echo $CHECKM2DB
+
+# If using extra binners (VAMB or LorBin)
+BASALT --check-deps -e v,l
+```
+
+#### Recommended directory structure
+
+```
+/your/base/directory/
+├── basalt_weights/          # BASALT model weights (set in pixi.toml)
+│   └── BASALT/
+│       ├── model1.pth
+│       └── model2.pth
+├── databases/
+│   └── checkm2db/
+│       └── CheckM2_database/
+│           └── uniref100.KO.1.dmnd  # Path set in pixi.toml
+└── BASALT/                  # BASALT source code (this repository)
+    ├── pixi.toml
+    ├── src/
+    └── ...
+```
 
 GPU note: `pixi.toml` declares `cuda = "12"` under `[system-requirements]`,
 so on a CUDA 12+ host pixi will pull GPU PyTorch automatically.
@@ -577,11 +671,57 @@ pip show BASALT       # should print v1.2.0
 
 ### `ERROR: DIAMOND database not found` (CheckM2)
 
-CheckM2 needs a database. Download per the official guide:
+**For pixi users:** Make sure you edited `pixi.toml` to set the correct `CHECKM2DB` path before running `pixi install`. Then run:
+
+```bash
+pixi run checkm2-db
+```
+
+**For manual installation:** Download the database:
 
 ```bash
 checkm2 database --download --path /path/to/checkm2db
 export CHECKM2DB=/path/to/checkm2db/CheckM2_database/uniref100.KO.1.dmnd
+```
+
+### Environment variables not set
+
+**For pixi users:** If `echo $BASALT_WEIGHT` or `echo $CHECKM2DB` returns empty:
+
+1. Check that you edited `pixi.toml` before running `pixi install`
+2. Make sure you're inside `pixi shell` or using `pixi run`
+3. Re-run `pixi install` after editing `pixi.toml`
+
+**For manual installation:** Add to `~/.bashrc` or `~/.zshrc`:
+
+```bash
+export BASALT_WEIGHT=/path/to/basalt_weights
+export CHECKM2DB=/path/to/checkm2db/CheckM2_database/uniref100.KO.1.dmnd
+```
+
+Then `source ~/.bashrc` (or `~/.zshrc`).
+
+### CUDA version mismatch
+
+If you see PyTorch CUDA errors:
+
+1. Check your CUDA version: `nvidia-smi` or `nvcc --version`
+2. Edit `pixi.toml` line 13 to match your CUDA version:
+   ```toml
+   cuda = "11"  # or "12" or "13"
+   ```
+3. Re-run `pixi install`
+
+### `libopenblas` or BLAS-related errors
+
+The updated `pixi.toml` includes `libopenblas` as a dependency. If you still encounter BLAS errors:
+
+```bash
+# For pixi users
+pixi install  # Re-run to ensure libopenblas is installed
+
+# For manual conda users
+conda install -c conda-forge libopenblas
 ```
 
 ### `samtools: error while loading shared libraries: libcrypto.so.1.0.0`

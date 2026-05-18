@@ -1,0 +1,99 @@
+================================================================================
+BASALT2 配置改进总结 (2026-05-18)
+Configuration Improvements Summary
+================================================================================
+
+本次更新解决了三个主要问题：
+This update addresses three main issues:
+
+1. ✅ 添加 libopenblas 依赖 / Added libopenblas dependency
+   - 位置 / Location: pixi.toml line 26
+   - 原因 / Reason: 确保 BLAS 库正确安装，避免 PyTorch/NumPy 运行时错误
+                    Ensures BLAS library is properly installed to prevent runtime errors
+
+2. ✅ 环境变量路径改为用户可配置 / Made environment variable paths user-configurable
+   - 位置 / Location: pixi.toml lines 78-87
+   - 改动 / Changes:
+     * BASALT_WEIGHT: "/scratch2/mz32/zhaorui/..." → "/path/to/basalt_weights"
+     * CHECKM2DB: "/fs04/scratch2/mz32/zhaorui/..." → "/path/to/checkm2db/..."
+   - 添加了清晰的注释说明用户必须在安装前编辑这些路径
+     Added clear comments that users MUST edit these paths before installation
+
+3. ✅ CUDA 版本配置说明 / CUDA version configuration instructions
+   - 位置 / Location: pixi.toml lines 9-13
+   - 添加了注释说明用户可以根据自己的 CUDA 版本修改
+     Added comments explaining users can modify based on their CUDA version
+
+4. ✅ 修复 checkm2-db 任务 / Fixed checkm2-db task
+   - 位置 / Location: pixi.toml line 96
+   - 使用环境变量动态获取路径，而不是硬编码
+     Uses environment variable to dynamically get path instead of hardcoding
+
+5. ✅ 更新 README.md / Updated README.md
+   - 在 News 部分添加了本次更新说明
+     Added update notes in News section
+   - 扩展了安装部分，包含详细的配置步骤
+     Expanded installation section with detailed configuration steps
+   - 添加了配置示例（Linux 和 macOS）
+     Added configuration examples (Linux and macOS)
+   - 扩展了故障排除部分
+     Expanded troubleshooting section
+
+================================================================================
+用户操作要求 / User Action Required
+================================================================================
+
+首次使用前必须执行 / MUST do before first use:
+
+1. 编辑 pixi.toml 第 85-86 行 / Edit pixi.toml lines 85-86:
+   BASALT_WEIGHT = "/your/actual/path/to/basalt_weights"
+   CHECKM2DB     = "/your/actual/path/to/checkm2db/CheckM2_database/uniref100.KO.1.dmnd"
+
+2. (可选) 修改 CUDA 版本 / (Optional) Modify CUDA version:
+   第 13 行 / Line 13: cuda = "12"  # 改为 "11" 或 "13" / Change to "11" or "13"
+
+3. 安装环境 / Install environment:
+   pixi install
+
+4. 下载数据 / Download data:
+   pixi run download-weights
+   pixi run checkm2-db
+
+================================================================================
+文件更改 / Files Changed
+================================================================================
+
+修改的文件 / Modified files:
+  - pixi.toml (配置文件 / configuration file)
+  - README.md (文档 / documentation)
+
+新增的文件 / New files:
+  - UPDATE_SUMMARY.txt (本文件 / this file)
+
+删除的文件 / Deleted files:
+  - INSTALLATION.md (内容已整合到 README.md / content merged into README.md)
+  - CHANGES.md (内容已整合到 README.md / content merged into README.md)
+
+================================================================================
+技术细节 / Technical Details
+================================================================================
+
+libopenblas 的必要性 / Why libopenblas is necessary:
+  - PyTorch 和 NumPy 依赖 BLAS 库进行矩阵运算
+    PyTorch and NumPy depend on BLAS library for matrix operations
+  - 显式声明可避免某些环境下的链接问题
+    Explicit declaration prevents linking issues in some environments
+
+环境变量工作原理 / How environment variables work:
+  - [activation.env] 中的变量在 pixi shell/run 时自动导出
+    Variables in [activation.env] are automatically exported in pixi shell/run
+  - 代码通过 os.environ.get() 读取
+    Code reads them via os.environ.get()
+
+CUDA 版本兼容性 / CUDA version compatibility:
+  - cuda = "12" 告诉 pixi 安装 CUDA 12 兼容的 PyTorch
+    cuda = "12" tells pixi to install CUDA 12 compatible PyTorch
+  - 用户应根据 nvidia-smi 显示的版本修改
+    Users should modify based on version shown by nvidia-smi
+
+================================================================================

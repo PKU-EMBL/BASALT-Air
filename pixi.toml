@@ -6,10 +6,11 @@ authors = ["BASALT contributors"]
 channels = ["conda-forge", "bioconda"]
 platforms = ["linux-64"]
 
-# CUDA 12.x runtime — pixi will pick GPU pytorch variants matching this.
+# CUDA runtime — pixi will pick GPU pytorch variants matching this.
 # L40S + driver 580 (reports CUDA 13) is forward-compatible with CUDA 12 builds.
+# Users can modify this value based on their CUDA version (e.g., "11", "12", "13")
 [system-requirements]
-cuda = "12"
+cuda = "12"  # Change this to match your CUDA version
 
 # ---------- Conda dependencies (Python + bioinformatics tools) ----------
 [dependencies]
@@ -22,6 +23,7 @@ pandas       = "*"
 numpy        = "*"
 scikit-learn = "*"
 pytorch-gpu  = "*"
+libopenblas  = "*"  # BLAS library for numerical operations
 
 # Binners
 metabat2 = "*"
@@ -74,10 +76,15 @@ ncbi-vdb       = "*"
 BASALT = { path = ".", editable = true }
 
 # ---------- Env vars set automatically when entering the env ----------
+# IMPORTANT: Users MUST edit these paths before first use!
+# These paths are specific to your system and must point to:
+#   - BASALT_WEIGHT: directory where model weights will be downloaded
+#   - CHECKM2DB: path to CheckM2 DIAMOND database file
+#   - CHECKM_DATA_PATH: (optional) path to legacy CheckM database
 [activation.env]
-BASALT_WEIGHT = "/scratch2/mz32/zhaorui/weight/BASALT"
-CHECKM2DB     = "/fs04/scratch2/mz32/zhaorui/db/checkm2db/CheckM2_database/uniref100.KO.1.dmnd"
-# CHECKM_DATA_PATH = "/fs04/scratch2/mz32/zhaorui/checkmdb"   # only set if running -q checkm (legacy CheckM)
+BASALT_WEIGHT = "/path/to/basalt_weights"  # CHANGE THIS: Set your model weights directory
+CHECKM2DB     = "/path/to/checkm2db/CheckM2_database/uniref100.KO.1.dmnd"  # CHANGE THIS: Set your CheckM2 DB path
+# CHECKM_DATA_PATH = "/path/to/checkmdb"   # CHANGE THIS if running -q checkm (legacy CheckM)
 
 # ---------- Convenience tasks ----------
 # Run any of these from the repo root with: pixi run <task-name>
@@ -86,6 +93,6 @@ help             = "BASALT --help"
 version          = "BASALT --version"
 check-deps       = "BASALT --check-deps"
 download-weights = "BASALT_models_download --path $BASALT_WEIGHT"
-checkm2-db       = "checkm2 database --download --path /fs04/scratch2/mz32/zhaorui/checkm2db"
+checkm2-db       = "checkm2 database --download --path $(dirname $CHECKM2DB)"
 # Quick health check: package imports + console-script reachable + version pin matches.
 sanity = "python -c 'import basalt; from basalt.cli import main; from basalt.logger import setup_logger; print(\"basalt\", basalt.__version__, \"sanity OK\")'"
