@@ -78,6 +78,7 @@ pixi install
 ### 4. Download databases
 
 **BASALT model weights** are available from:
+
 - **Hugging Face:** [https://huggingface.co/PKU-EMBL/BASALT_WEIGHT](https://huggingface.co/PKU-EMBL/BASALT_WEIGHT)
 - **Google Drive:** [https://drive.google.com/drive/folders/1d0e_2FpYRBAZLwKXl8fA-yDK4b5PBA_E](https://drive.google.com/drive/folders/1d0e_2FpYRBAZLwKXl8fA-yDK4b5PBA_E)
 - **Baidu Netdisk (百度网盘):** [https://pan.baidu.com/s/1ouKqabxHYr1GmvpquQCzqw?pwd=embl](https://pan.baidu.com/s/1ouKqabxHYr1GmvpquQCzqw?pwd=embl) (提取码: embl)
@@ -85,6 +86,7 @@ pixi install
 **CheckM2 database and demo data** are available from Google Drive and Baidu Netdisk (links above).
 
 Download and extract:
+
 - `basalt_weights/` → Set as `BASALT_WEIGHT` in `pixi.toml`
 - `checkm2db/` → Set `CHECKM2DB` to `checkm2db/CheckM2_database/uniref100.KO.1.dmnd` in `pixi.toml`
 - `checkmdb/` (optional) → For legacy CheckM support
@@ -160,6 +162,7 @@ BASALT \
 ```
 
 **Key parameters:**
+
 - `--workdir` — Directory for intermediate files (default: current directory)
 - `--outdir` — Directory for final output (default: same as workdir)
 
@@ -186,8 +189,8 @@ Run `BASALT --help` for full options.
 Test BASALT-Air with our demo dataset:
 
 **Download from:**
+
 - **Google Drive:** [https://drive.google.com/drive/folders/1d0e_2FpYRBAZLwKXl8fA-yDK4b5PBA_E](https://drive.google.com/drive/folders/1d0e_2FpYRBAZLwKXl8fA-yDK4b5PBA_E)
-- **Baidu Netdisk (百度网盘):** [https://pan.baidu.com/s/1ouKqabxHYr1GmvpquQCzqw?pwd=embl](https://pan.baidu.com/s/1ouKqabxHYr1GmvpquQCzqw?pwd=embl) (提取码: embl)
 
 ```bash
 # Extract demo data
