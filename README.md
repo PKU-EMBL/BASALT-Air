@@ -1,4 +1,4 @@
-# BASALT-Air v1.0.0: Binning Across a Series of Assemblies Toolkit
+# BASALT-Air v1.0.0: Binning Across a Series of Assemblies Toolkit Air Version
 
 **A lightweight, modular pipeline for high-quality metagenome-assembled genomes (MAGs) from short reads, long reads, and hybrid assemblies.**
 
