@@ -3,9 +3,9 @@ requires = ["setuptools>=64", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "BASALT"
-version = "1.2.0"
-description = "Modular metagenomic binning and refinement pipeline"
+name = "BASALT-Air"
+version = "1.0.0"
+description = "Lightweight modular metagenomic binning and refinement pipeline"
 readme = "README.md"
 requires-python = "==3.12.*"
 license = { text = "MIT" }
@@ -42,9 +42,9 @@ BASALT = "basalt.cli:main"
 BASALT_models_download = "basalt.ml.download:main"
 
 [project.urls]
-Homepage = "https://github.com/EMBL-PKU/BASALT"
-Repository = "https://github.com/EMBL-PKU/BASALT"
-Issues = "https://github.com/EMBL-PKU/BASALT/issues"
+Homepage = "https://github.com/PKU-EMBL/BASALT-Air"
+Repository = "https://github.com/PKU-EMBL/BASALT-Air"
+Issues = "https://github.com/PKU-EMBL/BASALT-Air/issues"
 
 [tool.setuptools]
 package-dir = { "" = "src" }

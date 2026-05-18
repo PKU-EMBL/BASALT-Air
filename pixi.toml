@@ -1,7 +1,7 @@
 [workspace]
-name = "BASALT"
-version = "1.2.0"
-description = "Modular metagenomic binning and refinement pipeline"
+name = "BASALT-Air"
+version = "1.0.0"
+description = "Lightweight modular metagenomic binning and refinement pipeline"
 authors = ["BASALT contributors"]
 channels = ["conda-forge", "bioconda"]
 platforms = ["linux-64"]
@@ -71,9 +71,9 @@ bedtools       = "*"
 entrez-direct  = "*"
 ncbi-vdb       = "*"
 
-# ---------- Editable install of BASALT itself ----------
+# ---------- Editable install of BASALT-Air itself ----------
 [pypi-dependencies]
-BASALT = { path = ".", editable = true }
+BASALT-Air = { path = ".", editable = true }
 
 # ---------- Env vars set automatically when entering the env ----------
 # IMPORTANT: Users MUST edit these paths before first use!
