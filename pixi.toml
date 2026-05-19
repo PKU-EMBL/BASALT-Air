@@ -25,6 +25,9 @@ scikit-learn = "*"
 pytorch-gpu  = "*"
 libopenblas  = "*"  # BLAS library for numerical operations
 
+# System compatibility layer for older Linux systems
+sysroot_linux-64 = ">=2.17"  # Provides GLIBC 2.17+ for CheckM2/TensorFlow compatibility
+
 # Binners
 metabat2 = "*"
 maxbin2  = "*"
