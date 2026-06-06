@@ -789,7 +789,14 @@ def re_assembly_main(binset_folder, datasets_list, long_read,
                 if file not in selected_bins.keys():
                     os.system('cp '+pwd+'/'+str(binset_folder)+'_mod/'+file+' '+pwd+'/'+binset_folder+'_re-assembly')
                     item_checkm_name=file.split('.fa')[0]
-                    best_bin_checkm[item_checkm_name]=bin_checkm[item_checkm_name]
+                    # Passthrough bins can lack QC when the source binset had no
+                    # quality_report.tsv (e.g. contig-retrieve was skipped), so
+                    # mod_bin's parse_results never produced an entry. Keep the
+                    # bin (already copied above) and default its QC instead of
+                    # crashing with KeyError; the report writer below is already
+                    # .get()-tolerant, and the final binset is re-scored by a
+                    # fresh CheckM2 run, so missing intermediate QC is harmless.
+                    best_bin_checkm[item_checkm_name]=bin_checkm.get(item_checkm_name, {})
     os.chdir(pwd)
 
     os.chdir(pwd+'/'+binset_folder+'_re-assembly')
