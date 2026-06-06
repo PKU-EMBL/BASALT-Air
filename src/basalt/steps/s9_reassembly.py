@@ -95,6 +95,20 @@ def mod_bin(binset_folder):
                     record_seq['bin'+str(n)]['bin'+str(n)+'_'+str(m)]=str(record.seq)
                 bin_contig_num['bin'+str(n)]=m
 
+    if n == 0:
+        f.close()
+        f1.close()
+        f2.close()
+        os.chdir(pwd)
+        raise RuntimeError(
+            'S9_Reassembly: binset {!r} selected for reassembly contains no '
+            '.fa bins. An upstream step (outlier removal / filtration / OLC) '
+            'produced an empty binset, so Total_bins.fa would be empty. '
+            'Aborting before the Bowtie2/mapping stage. Check the folder named '
+            'on the "8th contig OLC" line of Basalt_checkpoint.txt and the '
+            'outlier/filtration outputs upstream of it.'.format(binset_folder)
+        )
+
     raw_metrics = backend.parse_results(pwd+'/'+binset_folder)
     for original_name, metrics in raw_metrics.items():
         if original_name not in mod_bin_dict:

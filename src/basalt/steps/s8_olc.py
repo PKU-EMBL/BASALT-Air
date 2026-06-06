@@ -1697,6 +1697,15 @@ def OLC_main(target_bin_folder, step, bin_comparison_folder,
     fblasterror.close()
     fbin_record_error=open('Bin_record_error.txt','w')
     fbin_record_error.close()
+
+    # Snapshot the input binset so the "nothing merged" fallback below can
+    # restore it. OLC_main_checkm self-heals the same way; OLC_main historically
+    # relied on a backup it never created, which could yield an empty _OLC.
+    if os.path.exists(target_bin_folder+'_backup'):
+        print(target_bin_folder+'_backup present')
+    else:
+        os.system('cp -r '+target_bin_folder+' '+target_bin_folder+'_backup')
+
     accomplished_bins={}
     try:
         os.mkdir(target_bin_folder+'_OLC')
@@ -1887,7 +1896,13 @@ def OLC_main(target_bin_folder, step, bin_comparison_folder,
     else:
         os.chdir(pwd)
         os.system('rm -rf '+target_bin_folder+'_OLC')
-        os.system('cp -r '+target_bin_folder+'_backup '+target_bin_folder+'_OLC')
+        # OLC found nothing to merge: pass the original binset through unchanged.
+        # Prefer the entry-time snapshot; fall back to the live folder if the
+        # backup is somehow absent, so _OLC is never left empty when bins exist.
+        if os.path.exists(target_bin_folder+'_backup'):
+            os.system('cp -r '+target_bin_folder+'_backup '+target_bin_folder+'_OLC')
+        else:
+            os.system('cp -r '+target_bin_folder+' '+target_bin_folder+'_OLC')
 
     os.system('rm *_db.txt')
     os.system('rm *.nsq')

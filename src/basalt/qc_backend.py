@@ -37,6 +37,15 @@ import os
 from glob import glob
 
 
+def _normalise_col(name):
+    """Normalise a TSV column header for tolerant name matching.
+
+    Lower-cases and strips spaces/underscores so that ``Genome_Size``,
+    ``Genome size`` and ``genome_size`` all collapse to ``genomesize``.
+    """
+    return name.strip().lower().replace(' ', '').replace('_', '')
+
+
 def get_backend(qc_software):
     """
     Factory: return the QC backend instance for the given software name.
@@ -98,37 +107,62 @@ class CheckM2Backend(QCBackend):
         return os.path.join(output_dir, self.results_filename)
 
     def parse_results(self, containing_folder):
+        # Two layouts share this filename and both must be read:
+        #   * native CheckM2 (14 cols): Name, Completeness, Contamination, ...,
+        #     Contig_N50, Average_Gene_Length, Genome_Size, ...
+        #   * BASALT's internal report (5 cols): Bin_ID, Genome_size,
+        #     Completeness, Contamination, N50
+        # We resolve columns by (normalised) header name and fall back to the
+        # native CheckM2 positions when a header is absent/unrecognised, so an
+        # older positional file still parses.
         bins = {}
         for root, _dirs, files in os.walk(containing_folder):
             for fname in files:
                 if fname != self.results_filename:
                     continue
                 with open(os.path.join(root, fname)) as fh:
-                    for idx, line in enumerate(fh):
-                        if idx == 0:
-                            continue  # header
-                        fields = line.strip().split('\t')
-                        if len(fields) < 9:
-                            continue
-                        bin_id = fields[0]
-                        if '_genomes.0' in bin_id:
-                            continue
-                        try:
-                            completeness = float(fields[1])
-                            contamination = float(fields[2])
-                            n50 = float(fields[6])
-                            genome_size = int(float(fields[8]))
-                        except (ValueError, IndexError):
-                            continue
-                        bins[bin_id] = {
-                            'Completeness': completeness,
-                            'Contamination': contamination,
-                            'Genome size': genome_size,
-                            'contig_size': n50,
-                            'contig_size_key': 'N50',
-                            # Legacy aliases for call sites still reading the raw key:
-                            'N50': n50,
-                        }
+                    lines = fh.readlines()
+                if not lines:
+                    continue
+
+                header = [_normalise_col(h) for h in lines[0].rstrip('\n').split('\t')]
+                col = {name: i for i, name in enumerate(header)}
+
+                def _idx(candidates, fallback):
+                    for c in candidates:
+                        if c in col:
+                            return col[c]
+                    return fallback
+
+                i_comp = _idx(('completeness',), 1)
+                i_cont = _idx(('contamination',), 2)
+                i_n50 = _idx(('contign50', 'n50'), 6)
+                i_size = _idx(('genomesize',), 8)
+                need = max(i_comp, i_cont, i_n50, i_size)
+
+                for line in lines[1:]:
+                    fields = line.rstrip('\n').split('\t')
+                    if len(fields) <= need:
+                        continue
+                    bin_id = fields[0]
+                    if '_genomes.0' in bin_id:
+                        continue
+                    try:
+                        completeness = float(fields[i_comp])
+                        contamination = float(fields[i_cont])
+                        n50 = float(fields[i_n50])
+                        genome_size = int(float(fields[i_size]))
+                    except (ValueError, IndexError):
+                        continue
+                    bins[bin_id] = {
+                        'Completeness': completeness,
+                        'Contamination': contamination,
+                        'Genome size': genome_size,
+                        'contig_size': n50,
+                        'contig_size_key': 'N50',
+                        # Legacy aliases for call sites still reading the raw key:
+                        'N50': n50,
+                    }
         return bins
 
 
