@@ -95,6 +95,20 @@ def mod_bin(binset_folder):
                     record_seq['bin'+str(n)]['bin'+str(n)+'_'+str(m)]=str(record.seq)
                 bin_contig_num['bin'+str(n)]=m
 
+    if n == 0:
+        f.close()
+        f1.close()
+        f2.close()
+        os.chdir(pwd)
+        raise RuntimeError(
+            'S9_Reassembly: binset {!r} selected for reassembly contains no '
+            '.fa bins. An upstream step (outlier removal / filtration / OLC) '
+            'produced an empty binset, so Total_bins.fa would be empty. '
+            'Aborting before the Bowtie2/mapping stage. Check the folder named '
+            'on the "8th contig OLC" line of Basalt_checkpoint.txt and the '
+            'outlier/filtration outputs upstream of it.'.format(binset_folder)
+        )
+
     raw_metrics = backend.parse_results(pwd+'/'+binset_folder)
     for original_name, metrics in raw_metrics.items():
         if original_name not in mod_bin_dict:
@@ -436,6 +450,29 @@ def reassembly_lr(bin_seq, bin_lr, reassembly_bin_folder, num_threads,
     os.system('rm -rf '+str(item)+'_unicycler_reassembly')
 
 
+_DEFAULT_QC = {
+    'Completeness': 0.0,
+    'Contamination': 0.0,
+    'Genome size': 0,
+    'contig_size': 0.0,
+    'contig_size_key': 'N50',
+}
+
+
+def _qc(bin_checkm, name):
+    """QC metrics for ``name`` with zero defaults so a missing bin degrades to
+    worst-quality instead of raising KeyError.
+
+    Under ``--sensitive more-sensitive`` the SPAdes/Unicycler reassembly bins
+    are compared against the originals here. A passthrough original (source
+    binset had no quality_report.tsv) or a reassembled bin whose CheckM2 entry
+    was not produced can be absent from ``bin_checkm``; returning zeros lets the
+    comparison proceed (the other bin then wins). The final binset is re-scored
+    by a fresh CheckM2 run, so missing intermediate QC is harmless.
+    """
+    return bin_checkm.get(name, dict(_DEFAULT_QC))
+
+
 def bin_comparison(paired_bins, bin_checkm):
     pwd=os.getcwd()
     f=open('Reassembled_bins_comparison.txt','w')
@@ -444,18 +481,20 @@ def bin_comparison(paired_bins, bin_checkm):
         best_bin_checkm_name_list=item.split('.')
         best_bin_checkm_name_list.remove(best_bin_checkm_name_list[-1])
         best_bin_checkm_name='.'.join(best_bin_checkm_name_list)
-        f.write(str(item)+'\t'+str(bin_checkm[best_bin_checkm_name])+'\n')
+        f.write(str(item)+'\t'+str(_qc(bin_checkm, best_bin_checkm_name))+'\n')
         for item2 in paired_bins[item]:
             reass_bin_checkm_name_list=item2.split('.')
             reass_bin_checkm_name_list.remove(reass_bin_checkm_name_list[-1])
             reass_bin_checkm_name='.'.join(reass_bin_checkm_name_list)
-            f.write(str(item2)+'\t'+str(bin_checkm[reass_bin_checkm_name])+'\n')
-            best_bin_cpn=bin_checkm[best_bin_checkm_name]['Completeness']
-            best_bin_ctn=bin_checkm[best_bin_checkm_name]['Contamination']
-            best_bin_ml=bin_checkm[best_bin_checkm_name]['contig_size']
-            reass_bin_cpn=bin_checkm[reass_bin_checkm_name]['Completeness']
-            reass_bin_ctn=bin_checkm[reass_bin_checkm_name]['Contamination']
-            reass_bin_ml=bin_checkm[reass_bin_checkm_name]['contig_size']
+            best_metrics=_qc(bin_checkm, best_bin_checkm_name)
+            reass_metrics=_qc(bin_checkm, reass_bin_checkm_name)
+            f.write(str(item2)+'\t'+str(reass_metrics)+'\n')
+            best_bin_cpn=best_metrics['Completeness']
+            best_bin_ctn=best_metrics['Contamination']
+            best_bin_ml=best_metrics['contig_size']
+            reass_bin_cpn=reass_metrics['Completeness']
+            reass_bin_ctn=reass_metrics['Contamination']
+            reass_bin_ml=reass_metrics['contig_size']
 
             delta_cpn_ctn_bestbin=float(best_bin_cpn)-5*float(best_bin_ctn)
             delta_cpn_ctn_reass_bin=float(reass_bin_cpn)-float(5*reass_bin_ctn)
@@ -482,7 +521,7 @@ def bin_comparison(paired_bins, bin_checkm):
                     continue
 
         best_bin[best_bin_checkm_name+'.fa']=best_bin_checkm_name
-        best_bin_checkm[best_bin_checkm_name]=bin_checkm[best_bin_checkm_name].copy()
+        best_bin_checkm[best_bin_checkm_name]=_qc(bin_checkm, best_bin_checkm_name).copy()
     f.close()
     return best_bin, best_bin_checkm
 
@@ -775,7 +814,14 @@ def re_assembly_main(binset_folder, datasets_list, long_read,
                 if file not in selected_bins.keys():
                     os.system('cp '+pwd+'/'+str(binset_folder)+'_mod/'+file+' '+pwd+'/'+binset_folder+'_re-assembly')
                     item_checkm_name=file.split('.fa')[0]
-                    best_bin_checkm[item_checkm_name]=bin_checkm[item_checkm_name]
+                    # Passthrough bins can lack QC when the source binset had no
+                    # quality_report.tsv (e.g. contig-retrieve was skipped), so
+                    # mod_bin's parse_results never produced an entry. Keep the
+                    # bin (already copied above) and default its QC instead of
+                    # crashing with KeyError; the report writer below is already
+                    # .get()-tolerant, and the final binset is re-scored by a
+                    # fresh CheckM2 run, so missing intermediate QC is harmless.
+                    best_bin_checkm[item_checkm_name]=bin_checkm.get(item_checkm_name, {})
     os.chdir(pwd)
 
     os.chdir(pwd+'/'+binset_folder+'_re-assembly')
