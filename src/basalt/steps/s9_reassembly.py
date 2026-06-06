@@ -450,6 +450,29 @@ def reassembly_lr(bin_seq, bin_lr, reassembly_bin_folder, num_threads,
     os.system('rm -rf '+str(item)+'_unicycler_reassembly')
 
 
+_DEFAULT_QC = {
+    'Completeness': 0.0,
+    'Contamination': 0.0,
+    'Genome size': 0,
+    'contig_size': 0.0,
+    'contig_size_key': 'N50',
+}
+
+
+def _qc(bin_checkm, name):
+    """QC metrics for ``name`` with zero defaults so a missing bin degrades to
+    worst-quality instead of raising KeyError.
+
+    Under ``--sensitive more-sensitive`` the SPAdes/Unicycler reassembly bins
+    are compared against the originals here. A passthrough original (source
+    binset had no quality_report.tsv) or a reassembled bin whose CheckM2 entry
+    was not produced can be absent from ``bin_checkm``; returning zeros lets the
+    comparison proceed (the other bin then wins). The final binset is re-scored
+    by a fresh CheckM2 run, so missing intermediate QC is harmless.
+    """
+    return bin_checkm.get(name, dict(_DEFAULT_QC))
+
+
 def bin_comparison(paired_bins, bin_checkm):
     pwd=os.getcwd()
     f=open('Reassembled_bins_comparison.txt','w')
@@ -458,18 +481,20 @@ def bin_comparison(paired_bins, bin_checkm):
         best_bin_checkm_name_list=item.split('.')
         best_bin_checkm_name_list.remove(best_bin_checkm_name_list[-1])
         best_bin_checkm_name='.'.join(best_bin_checkm_name_list)
-        f.write(str(item)+'\t'+str(bin_checkm[best_bin_checkm_name])+'\n')
+        f.write(str(item)+'\t'+str(_qc(bin_checkm, best_bin_checkm_name))+'\n')
         for item2 in paired_bins[item]:
             reass_bin_checkm_name_list=item2.split('.')
             reass_bin_checkm_name_list.remove(reass_bin_checkm_name_list[-1])
             reass_bin_checkm_name='.'.join(reass_bin_checkm_name_list)
-            f.write(str(item2)+'\t'+str(bin_checkm[reass_bin_checkm_name])+'\n')
-            best_bin_cpn=bin_checkm[best_bin_checkm_name]['Completeness']
-            best_bin_ctn=bin_checkm[best_bin_checkm_name]['Contamination']
-            best_bin_ml=bin_checkm[best_bin_checkm_name]['contig_size']
-            reass_bin_cpn=bin_checkm[reass_bin_checkm_name]['Completeness']
-            reass_bin_ctn=bin_checkm[reass_bin_checkm_name]['Contamination']
-            reass_bin_ml=bin_checkm[reass_bin_checkm_name]['contig_size']
+            best_metrics=_qc(bin_checkm, best_bin_checkm_name)
+            reass_metrics=_qc(bin_checkm, reass_bin_checkm_name)
+            f.write(str(item2)+'\t'+str(reass_metrics)+'\n')
+            best_bin_cpn=best_metrics['Completeness']
+            best_bin_ctn=best_metrics['Contamination']
+            best_bin_ml=best_metrics['contig_size']
+            reass_bin_cpn=reass_metrics['Completeness']
+            reass_bin_ctn=reass_metrics['Contamination']
+            reass_bin_ml=reass_metrics['contig_size']
 
             delta_cpn_ctn_bestbin=float(best_bin_cpn)-5*float(best_bin_ctn)
             delta_cpn_ctn_reass_bin=float(reass_bin_cpn)-float(5*reass_bin_ctn)
@@ -496,7 +521,7 @@ def bin_comparison(paired_bins, bin_checkm):
                     continue
 
         best_bin[best_bin_checkm_name+'.fa']=best_bin_checkm_name
-        best_bin_checkm[best_bin_checkm_name]=bin_checkm[best_bin_checkm_name].copy()
+        best_bin_checkm[best_bin_checkm_name]=_qc(bin_checkm, best_bin_checkm_name).copy()
     f.close()
     return best_bin, best_bin_checkm
 

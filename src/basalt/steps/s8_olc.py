@@ -1698,13 +1698,14 @@ def OLC_main(target_bin_folder, step, bin_comparison_folder,
     fbin_record_error=open('Bin_record_error.txt','w')
     fbin_record_error.close()
 
-    # Snapshot the input binset so the "nothing merged" fallback below can
-    # restore it. OLC_main_checkm self-heals the same way; OLC_main historically
-    # relied on a backup it never created, which could yield an empty _OLC.
-    if os.path.exists(target_bin_folder+'_backup'):
-        print(target_bin_folder+'_backup present')
-    else:
-        os.system('cp -r '+target_bin_folder+' '+target_bin_folder+'_backup')
+    # Snapshot the *current* input binset fresh so the "nothing merged" fallback
+    # below restores exactly the binset we were handed. We must NOT reuse a
+    # pre-existing same-named folder: refinement creates
+    # BestBinset_outlier_refined_filtrated_retrieved_backup BEFORE the 2nd
+    # de-replication, and that orphan snapshot still contains the bins S6
+    # removed -- reusing it here would silently revive de-replicated bins.
+    os.system('rm -rf '+target_bin_folder+'_backup')
+    os.system('cp -r '+target_bin_folder+' '+target_bin_folder+'_backup')
 
     accomplished_bins={}
     try:
@@ -1903,6 +1904,11 @@ def OLC_main(target_bin_folder, step, bin_comparison_folder,
             os.system('cp -r '+target_bin_folder+'_backup '+target_bin_folder+'_OLC')
         else:
             os.system('cp -r '+target_bin_folder+' '+target_bin_folder+'_OLC')
+
+    # Drop the entry-time snapshot now that _OLC is finalised, so a stale backup
+    # is never left behind for a later step to misread (OLC_main_checkm consumes
+    # its backup with mv; OLC_main used cp and previously leaked it).
+    os.system('rm -rf '+target_bin_folder+'_backup')
 
     os.system('rm *_db.txt')
     os.system('rm *.nsq')
@@ -2116,10 +2122,12 @@ def OLC_main_checkm(target_bin_folder, step, bin_comparison_folder,
     fbin_record_error=open('Bin_record_error.txt','w')
     fbin_record_error.close()
 
-    if os.path.exists(target_bin_folder+'_backup'):
-        print(target_bin_folder+'_backup present')
-    else:
-        os.system('cp -r '+target_bin_folder+' '+target_bin_folder+'_backup')
+    # Snapshot the current input fresh (see OLC_main): never reuse a stale
+    # same-named backup left by refinement before the 2nd de-replication, which
+    # would revive de-replicated bins when the nothing-merged branch mv's the
+    # backup into _OLC below.
+    os.system('rm -rf '+target_bin_folder+'_backup')
+    os.system('cp -r '+target_bin_folder+' '+target_bin_folder+'_backup')
 
     # OLC_status={}
     # try:
@@ -2551,6 +2559,11 @@ def OLC_main_checkm(target_bin_folder, step, bin_comparison_folder,
 
         os.system('rm -rf '+target_bin_folder+'_OLC')
         os.system('mv '+target_bin_folder+'_backup '+target_bin_folder+'_OLC') ### BASALT_main copied the backup folder
+
+    # Drop the entry-time snapshot if a merge path left it unconsumed (the mv
+    # restores above consume it; the merged-bins path does not), mirroring the
+    # end-cleanup in OLC_main so the fresh backup never leaks to disk.
+    os.system('rm -rf '+target_bin_folder+'_backup')
 
     os.system('mkdir '+target_bin_folder+'_OLC_file')
     os.system('mv Remained_unused_blastoutput.txt Bin_checkm_mode.txt Elongation* Deleted_tw_bins_for_further_lw.txt OLC_fault_bins.txt lw_processed_bins.txt tw_processed_bins.txt '+target_bin_folder+'_OLC_file')

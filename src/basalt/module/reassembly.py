@@ -303,22 +303,28 @@ def BASALT_main_re_assembly(assembly_list, datasets, num_threads, lr_list, hifi_
             if len(assembly_list) > 1:
                 print('Starting OLC process')
                 if len(lr_list) == 0 and len(hifi_list) == 0: ### only HTS datasets presented, perform OLC
-                    try:
-                        bin_n=0
-                        os.chdir(pwd+'/BestBinset_outlier_refined_filtrated_retrieved_retrieved')
-                        for root, dirs, files in os.walk(pwd+'/BestBinset_outlier_refined_filtrated_retrieved_retrieved'):
-                            for file in files:
-                                hz=file.split('.')[-1]
-                                if 'fa' in hz or 'fna' in hz:
-                                    bin_n+=1
-                        os.chdir(pwd)
-                        if bin_n != 0:
-                            target_bin_folder='BestBinset_outlier_refined_filtrated_retrieved_retrieved'
-                        else:
-                            target_bin_folder='BestBinset_outlier_refined_filtrated_retrieved'
-                    except:
-                        print('There is not bin in BestBinset_outlier_refined_filtrated_retrieved_retrieved. Try BestBinset_outlier_refined_filtrated_retrieved')
-                        target_bin_folder='BestBinset_outlier_refined_filtrated_retrieved'
+                    # Resolve the binset fed into OLC, tolerating skipped upstream
+                    # steps: on low-connectivity pure-SR input the contig-retrieve
+                    # step (gated on PE/long-read connections in refinement) does
+                    # not run, so *_filtrated_retrieved is never created. Pick the
+                    # first existing non-empty binset in preference order and fall
+                    # back to BestBinset_outlier_refined (always produced by S4),
+                    # instead of handing OLC_main a missing folder (FileNotFoundError).
+                    olc_candidates = [
+                        'BestBinset_outlier_refined_filtrated_retrieved_retrieved',
+                        'BestBinset_outlier_refined_filtrated_retrieved',
+                        'BestBinset_outlier_refined',
+                    ]
+                    target_bin_folder = None
+                    for _cand in olc_candidates:
+                        if _folder_has_fasta(os.path.join(pwd, _cand)):
+                            target_bin_folder = _cand
+                            break
+                    if target_bin_folder is None:
+                        target_bin_folder = olc_candidates[-1]
+                        print('No non-empty pre-OLC binset found; falling back to '+target_bin_folder)
+                    else:
+                        print('Selected pre-OLC binset: '+target_bin_folder)
 
                     print('Processing with bins in '+str(target_bin_folder))
                     bin_comparison_folder='BestBinset_comparison_files'
