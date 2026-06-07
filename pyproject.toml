@@ -38,8 +38,8 @@ dev = [
 ]
 
 [project.scripts]
-BASALT = "basalt.cli:main"
-BASALT_models_download = "basalt.ml.download:main"
+basalt = "basalt.cli:main"
+basalt_models_download = "basalt.ml.download:main"
 
 [project.urls]
 Homepage = "https://github.com/PKU-EMBL/BASALT-Air"

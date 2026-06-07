@@ -1,60 +1,67 @@
-# BASALT-Air v1.0.0: Binning Across a Series of Assemblies Toolkit Air Version
+# BASALT-Air v1.0.0
 
-**A lightweight, modular pipeline for high-quality metagenome-assembled genomes (MAGs) from short reads, long reads, and hybrid assemblies.**
+**Binning Across a Series of Assemblies Toolkit, Air version.**
+
+BASALT-Air is a lightweight, modular metagenomic binning and refinement pipeline for generating high-quality metagenome-assembled genomes (MAGs) from short reads, long reads, and hybrid assemblies.
 
 [![Nature Communications](https://img.shields.io/badge/Nature%20Communications-2024-blue)](https://doi.org/10.1038/s41467-024-46539-7)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-## Overview
+## Highlights
 
-BASALT is a versatile metagenomic binning pipeline that integrates autobinning, multi-assembly dereplication, deep-learning-based outlier removal, contig retrieval, OLC elongation, and reassembly in a unified workflow. It produces high-quality MAGs from diverse sequencing inputs.
+- Absolute input path support, so runs do not need to start inside data directories.
+- Multi-assembly binning and dereplication.
+- Deep-learning-based bin refinement.
+- Short-read, ONT/PacBio long-read, and PacBio HiFi support.
+- Modular execution: autobinning, refinement, reassembly, and datafeeding.
+- Reproducible run manifests and timestamped logs.
 
-**Key features:**
+The command-line entry points installed by this package are lowercase:
 
-- **Absolute path support** — No need to `cd` into data directories; specify files from anywhere
-- Multi-assembly binning and dereplication
-- Deep learning-based bin refinement
-- Support for short reads, long reads (ONT/PacBio), and HiFi
-- Modular architecture (autobinning, refinement, reassembly, datafeeding)
-- Reproducible runs with automatic logging and manifests
+```bash
+basalt
+basalt_models_download
+```
 
-**Publication:** Qiu, Z. et al. _Nature Communications_ **15**, 2179 (2024). [doi:10.1038/s41467-024-46539-7](https://doi.org/10.1038/s41467-024-46539-7)
+The internal Python package remains `basalt` for compatibility with the existing codebase.
 
 ## Workflow
 
 <p align="center">
-  <img src="fig/workflow.png" width="75%" alt="BASALT workflow">
+  <img src="fig/workflow.png" width="75%" alt="BASALT-Air workflow">
 </p>
 
-BASALT consists of four modules:
+BASALT-Air consists of four modules:
 
-| Module          | Steps  | Description                                                                                             |
-| --------------- | ------ | ------------------------------------------------------------------------------------------------------- |
-| **autobinning** | S1-S4  | Read mapping, binning (MetaBAT2/MaxBin2/CONCOCT/SemiBin), within-group and multi-assembly dereplication |
-| **refinement**  | S5-S7  | DL-based outlier removal, contig retrieval, optional polishing                                          |
-| **reassembly**  | S8-S10 | OLC elongation, short-read/hybrid reassembly, post-reassembly dereplication                             |
-| **datafeeding** | —      | Integrate external binsets, re-run S4+S5                                                                |
+| Module | Steps | Description |
+| --- | --- | --- |
+| `autobinning` | S1-S4 | Read mapping, binning, within-group dereplication, and multi-assembly dereplication |
+| `refinement` | S5-S7 | Deep-learning outlier removal, contig retrieval, and optional polishing |
+| `reassembly` | S8-S10 | OLC elongation, short-read/hybrid reassembly, and post-reassembly dereplication |
+| `datafeeding` | - | Integrate external binsets and rerun downstream comparison/refinement |
 
-Default `--module all` runs autobinning → refinement → reassembly sequentially.
+Default `--module all` runs autobinning, refinement, and reassembly sequentially.
 
 ## Installation
 
-BASALT requires Python 3.12 and uses [pixi](https://pixi.sh) for dependency management.
+BASALT-Air requires Linux and Python 3.12. The recommended installation path is [pixi](https://pixi.sh), which installs Python dependencies and the external bioinformatics tools listed in `pixi.toml`.
 
-### 1. Install pixi
+### 1. Install Pixi
 
 ```bash
 curl -fsSL https://pixi.sh/install.sh | sh
 ```
 
-### 2. Clone and configure
+### 2. Clone The Repository
 
 ```bash
-git clone https://github.com/EMBL-PKU/BASALT-Air.git
+git clone https://github.com/PKU-EMBL/BASALT-Air.git
 cd BASALT-Air
 ```
 
-**Edit `pixi.toml`** (lines 85-87) to set your paths:
+### 3. Configure Local Paths
+
+Edit `pixi.toml` before the first run:
 
 ```toml
 [activation.env]
@@ -62,90 +69,100 @@ BASALT_WEIGHT = "/your/path/to/basalt_weights"
 CHECKM2DB     = "/your/path/to/checkm2db/CheckM2_database/uniref100.KO.1.dmnd"
 ```
 
-**Optional:** Adjust CUDA version (line 13) if needed:
+If your system needs a different CUDA compatibility target, update:
 
 ```toml
 [system-requirements]
-cuda = "12"  # Change to "11" or "13" based on your system
+cuda = "12"
 ```
 
-### 3. Install dependencies
+### 4. Install The Environment
 
 ```bash
 pixi install
 ```
 
-### 4. Download databases
+### 5. Download Model Weights And Databases
 
-**BASALT model weights** are available from:
+BASALT-Air model weights are available from:
 
-- **Hugging Face:** [https://huggingface.co/PKU-EMBL/BASALT_WEIGHT](https://huggingface.co/PKU-EMBL/BASALT_WEIGHT)
-- **Google Drive:** [https://drive.google.com/drive/folders/1d0e_2FpYRBAZLwKXl8fA-yDK4b5PBA_E](https://drive.google.com/drive/folders/1d0e_2FpYRBAZLwKXl8fA-yDK4b5PBA_E)
-- **Baidu Netdisk (百度网盘):** [https://pan.baidu.com/s/1ouKqabxHYr1GmvpquQCzqw?pwd=embl](https://pan.baidu.com/s/1ouKqabxHYr1GmvpquQCzqw?pwd=embl) (提取码: embl)
+- Hugging Face: <https://huggingface.co/PKU-EMBL/BASALT_WEIGHT>
+- Google Drive: <https://drive.google.com/drive/folders/1d0e_2FpYRBAZLwKXl8fA-yDK4b5PBA_E>
+- Baidu Netdisk: <https://pan.baidu.com/s/1ouKqabxHYr1GmvpquQCzqw?pwd=embl> (提取码: `embl`)
 
-**CheckM2 database and demo data** are available from Google Drive and Baidu Netdisk (links above).
+CheckM2 database and demo data are available from the same Google Drive and Baidu Netdisk links.
 
-Download and extract:
+Expected local paths:
 
-- `basalt_weights/` → Set as `BASALT_WEIGHT` in `pixi.toml`
-- `checkm2db/` → Set `CHECKM2DB` to `checkm2db/CheckM2_database/uniref100.KO.1.dmnd` in `pixi.toml`
-- `checkmdb/` (optional) → For legacy CheckM support
+- `basalt_weights/` should match `BASALT_WEIGHT`.
+- `checkm2db/CheckM2_database/uniref100.KO.1.dmnd` should match `CHECKM2DB`.
+- `checkmdb/` is optional and only needed for legacy CheckM runs.
 
-**Quick download with Hugging Face CLI:**
+You can download model weights with either Hugging Face CLI:
 
 ```bash
-# Install huggingface-cli
 pip install huggingface_hub
-
-# Download BASALT weights
 huggingface-cli download PKU-EMBL/BASALT_WEIGHT --local-dir /your/path/to/basalt_weights
 ```
 
-Alternatively, use pixi tasks to download automatically:
+or the pixi task:
 
 ```bash
-pixi run download-weights  # BASALT DL models (~100 MB)
-pixi run checkm2-db        # CheckM2 database (~3 GB)
+pixi run download-weights
 ```
 
-### 5. Verify installation
+Download the CheckM2 database with:
+
+```bash
+pixi run checkm2-db
+```
+
+## Verify Installation
 
 ```bash
 pixi shell
-BASALT --version
-BASALT --check-deps
+basalt --version
+basalt --check-deps
+```
+
+You can also run the predefined tasks without entering the shell:
+
+```bash
+pixi run version
+pixi run check-deps
+pixi run sanity
 ```
 
 ## Quick Start
 
-### Basic usage
+Single assembly with paired-end reads:
 
 ```bash
-pixi shell  # Activate environment
+basalt -a assembly.fa -s r1.fq,r2.fq -t 32 -m 128
+```
 
-# Single assembly + paired-end reads
-BASALT -a assembly.fa -s r1.fq,r2.fq -t 32 -m 128
+Multiple assemblies and datasets:
 
-# Multiple assemblies + datasets
-BASALT -a as1.fa,as2.fa,as3.fa \
+```bash
+basalt -a as1.fa,as2.fa,as3.fa \
        -s d1_r1.fq,d1_r2.fq/d2_r1.fq,d2_r2.fq/d3_r1.fq,d3_r2.fq \
        -t 60 -m 250
+```
 
-# Hybrid assembly (short + long + HiFi)
-BASALT -a assembly.fa \
+Hybrid assembly with short reads, ONT/PacBio long reads, and HiFi reads:
+
+```bash
+basalt -a assembly.fa \
        -s sr_r1.fq,sr_r2.fq \
        -l ont.fq \
        -hf hifi.fq \
        -t 60 -m 250
 ```
 
-### Using absolute paths (recommended)
-
-**No need to `cd` into data directories!** BASALT-Air accepts absolute paths for all inputs:
+Run from any directory with absolute paths:
 
 ```bash
-# Run from anywhere with absolute paths
-BASALT \
+basalt \
     -a /path/to/data/assembly.fa \
     -s /path/to/data/sample1.R1.fq,/path/to/data/sample1.R2.fq \
     -l /path/to/data/sample1.nanopore.fq \
@@ -153,52 +170,50 @@ BASALT \
     -o my_project \
     --workdir /scratch/work \
     --outdir /results/output
+```
 
-# Multiple datasets with absolute paths (use ';' as separator)
-BASALT \
+For multiple absolute-path paired-end datasets, use `;` between read pairs:
+
+```bash
+basalt \
     -a /data/as1.fa,/data/as2.fa \
     -s /data/s1_R1.fq,/data/s1_R2.fq;/data/s2_R1.fq,/data/s2_R2.fq \
     -t 64 -m 128
 ```
 
-**Key parameters:**
+## Common Options
 
-- `--workdir` — Directory for intermediate files (default: current directory)
-- `--outdir` — Directory for final output (default: same as workdir)
+| Flag | Description | Default |
+| --- | --- | --- |
+| `-a`, `--assemblies` | Assembly FASTA files, comma-separated | - |
+| `-s`, `--shortreads` | Paired-end short reads | - |
+| `-l`, `--longreads` | ONT/PacBio CLR long reads | - |
+| `-hf`, `--hifi` | PacBio HiFi reads | - |
+| `-t`, `--threads` | Number of threads | `4` |
+| `-m`, `--ram` | RAM in GB | `32` |
+| `-q`, `--quality-check` | `checkm2` or `checkm` | `checkm2` |
+| `--module` | `all`, `autobinning`, `refinement`, or `reassembly` | `all` |
+| `--min-cpn` | Minimum completeness percentage | `35` |
+| `--max-ctn` | Maximum contamination percentage | `20` |
+| `-o`, `--out` | Output folder name | `Final_binset` |
+| `--workdir` | Directory for intermediate files | current directory |
+| `--outdir` | Directory for final output | same as `--workdir` |
 
-### Key options
+Run `basalt --help` for the full option list.
 
-| Flag        | Description                                      | Default        |
-| ----------- | ------------------------------------------------ | -------------- |
-| `-a`        | Assembly FASTA (comma-separated)                 | —              |
-| `-s`        | Paired-end short reads                           | —              |
-| `-l`        | Long reads (ONT/PacBio CLR)                      | —              |
-| `-hf`       | PacBio HiFi reads                                | —              |
-| `-t`        | Threads                                          | 4              |
-| `-m`        | RAM (GB)                                         | 32             |
-| `-q`        | Quality check: `checkm2` or `checkm`             | `checkm2`      |
-| `--module`  | `all`, `autobinning`, `refinement`, `reassembly` | `all`          |
-| `--min-cpn` | Minimum completeness (%)                         | 35             |
-| `--max-ctn` | Maximum contamination (%)                        | 20             |
-| `-o`        | Output folder name                               | `Final_binset` |
+## Demo Dataset
 
-Run `BASALT --help` for full options.
+Demo data are available from:
 
-### Demo dataset
+- Google Drive: <https://drive.google.com/drive/folders/1d0e_2FpYRBAZLwKXl8fA-yDK4b5PBA_E>
+- Baidu Netdisk: <https://pan.baidu.com/s/1ouKqabxHYr1GmvpquQCzqw?pwd=embl> (提取码: `embl`)
 
-Test BASALT-Air with our demo dataset:
-
-**Download from:**
-
-- **Google Drive:** [https://drive.google.com/drive/folders/1d0e_2FpYRBAZLwKXl8fA-yDK4b5PBA_E](https://drive.google.com/drive/folders/1d0e_2FpYRBAZLwKXl8fA-yDK4b5PBA_E)
+Example:
 
 ```bash
-# Extract demo data
 tar -xzf BASALT_demo.tar.gz
 
-# Run from anywhere using absolute paths (no need to cd!)
-pixi shell
-BASALT \
+basalt \
     -a /path/to/BASALT_demo/Data/assembly.fa \
     -s /path/to/BASALT_demo/Data/sample1.R1.fq,/path/to/BASALT_demo/Data/sample1.R2.fq \
     -l /path/to/BASALT_demo/Data/sample1.nanopore.fq \
@@ -208,20 +223,20 @@ BASALT \
     --outdir /results/demo_output
 ```
 
-This demo includes a hybrid assembly with short reads and Nanopore long reads.
-
 ## Output
 
-Results are written to `<output_folder>/` (default: `Final_binset/`):
+Results are written to `<output_folder>/`, defaulting to `Final_binset/`.
 
-- `*.fa` — Final dereplicated MAGs
-- `OLC_quality_report.tsv` — Completeness, contamination, N50, etc.
-- `BASALT_run_manifest.json` — Full reproducibility metadata
-- `Basalt_log.txt` — Timestamped pipeline log
+Key output files include:
+
+- `*.fa`: final dereplicated MAGs.
+- `OLC_quality_report.tsv`: completeness, contamination, N50, and related metrics.
+- `BASALT_run_manifest.json`: reproducibility metadata.
+- `Basalt_log.txt`: timestamped pipeline log.
 
 ## Citation
 
-If you use BASALT in your research, please cite:
+If you use BASALT-Air in your research, cite the original BASALT publication:
 
 ```bibtex
 @article{qiu2024basalt,
@@ -239,14 +254,10 @@ If you use BASALT in your research, please cite:
 }
 ```
 
----
-
 ## License
 
-MIT License. See [LICENSE](LICENSE) for details.
-
----
+MIT License. See [LICENSE](LICENSE).
 
 ## Contact
 
-For issues and questions, please open an issue on [GitHub](https://github.com/EMBL-PKU/BASALT-Air/issues) or contact <yuke.sz@pku.edu.cn> and <zrjiang25@stu.pku.edu.cn>.
+For issues and questions, open an issue at <https://github.com/PKU-EMBL/BASALT-Air/issues> or contact <yuke.sz@pku.edu.cn> and <zrjiang25@stu.pku.edu.cn>.

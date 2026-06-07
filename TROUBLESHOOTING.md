@@ -41,7 +41,7 @@ pixi run check-deps
 
 3. **Use CheckM instead of CheckM2** (temporary workaround):
    ```bash
-   BASALT -a assembly.fa -s reads.fq -q checkm ...
+   basalt -a assembly.fa -s reads.fq -q checkm ...
    ```
    Note: CheckM is slower and less accurate than CheckM2.
 
@@ -84,20 +84,20 @@ pixi install
 
 1. **Reduce thread count:**
    ```bash
-   BASALT -a assembly.fa -s reads.fq -t 8 -m 64 ...  # Lower -t and -m
+   basalt -a assembly.fa -s reads.fq -t 8 -m 64 ...  # Lower -t and -m
    ```
 
 2. **Use fewer binners:**
    ```bash
-   BASALT -a assembly.fa -s reads.fq -b metabat2,maxbin2 ...  # Skip CONCOCT/SemiBin
+   basalt -a assembly.fa -s reads.fq -b metabat2,maxbin2 ...  # Skip CONCOCT/SemiBin
    ```
 
 3. **Process samples separately:**
    ```bash
    # Instead of: -s sample1.fq,sample2.fq,sample3.fq
    # Run individually:
-   BASALT -a assembly.fa -s sample1.fq -o run1 ...
-   BASALT -a assembly.fa -s sample2.fq -o run2 ...
+   basalt -a assembly.fa -s sample1.fq -o run1 ...
+   basalt -a assembly.fa -s sample2.fq -o run2 ...
    ```
 
 ---
@@ -143,12 +143,12 @@ PermissionError: [Errno 13] Permission denied: '/path/to/output'
 
 2. **Use a different output directory:**
    ```bash
-   BASALT -a assembly.fa -s reads.fq --outdir ~/basalt_output ...
+   basalt -a assembly.fa -s reads.fq --outdir ~/basalt_output ...
    ```
 
 3. **On shared clusters, use your home or scratch space:**
    ```bash
-   BASALT -a assembly.fa -s reads.fq \
+   basalt -a assembly.fa -s reads.fq \
      --workdir $HOME/basalt_work \
      --outdir $HOME/basalt_output ...
    ```
@@ -178,17 +178,17 @@ pixi run check-deps
 
 1. **Use more threads** (if you have the cores):
    ```bash
-   BASALT -a assembly.fa -s reads.fq -t 32 ...
+   basalt -a assembly.fa -s reads.fq -t 32 ...
    ```
 
 2. **Skip reassembly** if you only need bins:
    ```bash
-   BASALT -a assembly.fa -s reads.fq --module autobinning,refinement ...
+   basalt -a assembly.fa -s reads.fq --module autobinning,refinement ...
    ```
 
 3. **Use faster binners only:**
    ```bash
-   BASALT -a assembly.fa -s reads.fq -b metabat2,semibin ...  # Skip MaxBin2/CONCOCT
+   basalt -a assembly.fa -s reads.fq -b metabat2,semibin ...  # Skip MaxBin2/CONCOCT
    ```
 
 4. **Pre-filter short contigs:**
@@ -226,7 +226,7 @@ If your issue isn't covered here:
 3. **Report issues:** [GitHub Issues](https://github.com/EMBL-PKU/BASALT-Air/issues)
 
 When reporting issues, please include:
-- BASALT version: `pixi run version`
+- BASALT-Air version: `pixi run version`
 - System info: `uname -a` and `ldd --version`
 - Full error message and command used
 - Relevant log files from `<workdir>/logs/`

@@ -2,7 +2,7 @@
 # -*- coding: UTF-8 -*-
 
 """
-Autobinning entry point for the BASALT pipeline.
+Autobinning entry point for the BASALT-Air pipeline.
 
 This module runs the initial binning workflows, including multiple
 autobinners and optional extra binners, and records progress in
@@ -58,7 +58,7 @@ def BASALT_main_autobinning(assembly_list, datasets, num_threads, lr_list, hifi_
         x=0
     else:
         print('BASALT models lacking. Start download the model')
-        # os.system('python BASALT_models_download.py')
+        # Legacy standalone downloader replaced by basalt.ml.download.
         from basalt.ml.download import main as _download_models
         _download_models()
 

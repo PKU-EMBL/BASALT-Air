@@ -3,7 +3,7 @@
 """
 Utility script for downloading and unpacking BASALT model weights.
 
-This script can be invoked directly or from within the BASALT pipeline
+This script can be invoked directly or from within the BASALT-Air pipeline
 to ensure that the required deep learning models are present locally.
 """
 

@@ -2,7 +2,7 @@
 # -*- coding: UTF-8 -*-
 
 """
-Refinement entry point for the BASALT pipeline.
+Refinement entry point for the BASALT-Air pipeline.
 
 This module runs DL-based outlier removal (S5) and within-group contig
 retrieval (S6 / S7 / S7lr), records progress in ``Basalt_checkpoint.txt``
@@ -62,7 +62,7 @@ def BASALT_main_refinement(assembly_list, datasets, num_threads, lr_list, hifi_l
         x=0
     else:
         print('BASALT models lacking. Start download the model')
-        # os.system('python BASALT_models_download.py')
+        # Legacy standalone downloader replaced by basalt.ml.download.
         from basalt.ml.download import main as _download_models
         _download_models()
 
@@ -280,7 +280,7 @@ def BASALT_main_refinement(assembly_list, datasets, num_threads, lr_list, hifi_l
                 raise FileNotFoundError(
                     'Refinement requires autobinning outputs in the working '
                     'directory ({pwd}); missing: {files}.\n'
-                    'Run `BASALT --module autobinning ...` (with the same '
+                    'Run `basalt --module autobinning ...` (with the same '
                     '-a/-s1/-s2 inputs) first, or use `--module all` to run '
                     'the full pipeline. If a previous autobinning run was '
                     'interrupted, rerun it with `--mode new` to regenerate '

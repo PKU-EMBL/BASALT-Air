@@ -2,7 +2,7 @@
 # -*- coding: UTF-8 -*-
 
 """
-Re-assembly entry point for the BASALT pipeline.
+Re-assembly entry point for the BASALT-Air pipeline.
 
 This module orchestrates OLC-based reassembly, hybrid reassembly, and
 final polishing of bins when long reads or HiFi datasets are provided.
@@ -90,7 +90,7 @@ def BASALT_main_re_assembly(assembly_list, datasets, num_threads, lr_list, hifi_
         x=0
     else:
         print('BASALT models lacking. Start download the model')
-        # os.system('python BASALT_models_download.py')
+        # Legacy standalone downloader replaced by basalt.ml.download.
         from basalt.ml.download import main as _download_models
         _download_models()
 

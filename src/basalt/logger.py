@@ -1,5 +1,5 @@
 """
-Lightweight logging facade for BASALT.
+Lightweight logging facade for BASALT-Air.
 
 The legacy pipeline mixes ``print()`` with manual ``open('Basalt_log.txt', 'a')``
 writes scattered across ~30 modules. This module wraps stdlib ``logging`` so
@@ -36,7 +36,7 @@ _initialised = False
 
 
 def setup_logger(logfile=None, level=logging.INFO):
-    """Configure the BASALT logger to write to stdout and ``logfile``.
+    """Configure the BASALT-Air logger to write to stdout and ``logfile``.
 
     Idempotent: subsequent calls re-target the file handler if ``logfile``
     differs (useful when the CLI chdirs into ``--workdir`` after parsing).
@@ -79,7 +79,7 @@ def setup_logger(logfile=None, level=logging.INFO):
         except OSError as e:
             # Don't crash the pipeline just because the log file is unwritable.
             sys.stderr.write(
-                "[BASALT] WARNING: could not open log file {!r}: {}\n".format(target, e)
+                "[BASALT-Air] WARNING: could not open log file {!r}: {}\n".format(target, e)
             )
 
     _initialised = True
@@ -87,7 +87,7 @@ def setup_logger(logfile=None, level=logging.INFO):
 
 
 def get_logger():
-    """Return the singleton BASALT logger, configuring it lazily if needed."""
+    """Return the singleton BASALT-Air logger, configuring it lazily if needed."""
     if not _initialised:
         setup_logger()
     return logging.getLogger(LOGGER_NAME)

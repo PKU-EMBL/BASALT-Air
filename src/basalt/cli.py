@@ -2,7 +2,7 @@
 # -*- coding: UTF-8 -*-
 
 """
-Command-line interface for the BASALT metagenomic binning pipeline.
+Command-line interface for the BASALT-Air metagenomic binning pipeline.
 
 This script parses user arguments and dispatches to the corresponding
 pipeline modules (autobinning, refinement, reassembly, data feeding,
@@ -56,12 +56,12 @@ examples
 
 parser = argparse.ArgumentParser(
     prog='basalt',
-    description='BASALT: metagenomic binning, refinement, and reassembly pipeline.',
+    description='BASALT-Air: metagenomic binning, refinement, and reassembly pipeline.',
     epilog=_USAGE_EXAMPLES,
     formatter_class=argparse.RawDescriptionHelpFormatter,
 )
 parser.add_argument('-V', '--version', action='version',
-                    version='%(prog)s ' + __import__('basalt').__version__)
+                    version='%(prog)s (BASALT-Air) ' + __import__('basalt').__version__)
 parser.add_argument('--check-deps', action='store_true', dest='check_deps',
                     help='Check that required external tools (bowtie2, samtools, minimap2, metabat2, checkm2/checkm, blastn, ...) are on PATH and exit. Useful before submitting a long job.')
 parser.add_argument('--dry-run', action='store_true', dest='dry_run',
@@ -83,13 +83,13 @@ parser.add_argument('-m','--ram', type=int, dest='ram', default=32,
 parser.add_argument('-e','--extra_binner', type=str, dest='extra_binner',
                     help='Extra binner(s) to run alongside metabat2, maxbin2 and concoct. v: vamb, l: lorbin. e.g. -e v or -e v,l')
 parser.add_argument('-o','--out', type=str, dest='output_folder_name', default='Final_binset',
-                    help='Name of the output folder. For binning, E.g. -o Anammox. BASALT would put those bins into folder Anammox_final_binset; for data feeding, e.g. -o Anammox; output files will under the folder of Anammox_data_feeded')
+                    help='Name of the output folder. For binning, E.g. -o Anammox. BASALT-Air would put those bins into folder Anammox_final_binset; for data feeding, e.g. -o Anammox; output files will under the folder of Anammox_data_feeded')
 parser.add_argument('-w','--workdir', type=str, dest='workdir', default=None,
-                    help='Directory for intermediate process files. Default: current directory. BASALT will create it if missing and chdir into it before running.')
+                    help='Directory for intermediate process files. Default: current directory. BASALT-Air will create it if missing and chdir into it before running.')
 parser.add_argument('--outdir', type=str, dest='outdir', default=None,
                     help='Directory where the final output folder is moved to once the pipeline finishes. Default: same as --workdir (output stays alongside intermediates).')
 parser.add_argument('-q','--quality-check', type=str, dest='quality_check', default='checkm2', 
-                    help='Chance checkm version, default: checkm2; you may use: \'-q checkm\' to specify checkm for quality check when running BASALT')
+                    help='Chance checkm version, default: checkm2; you may use: \'-q checkm\' to specify checkm for quality check when running BASALT-Air')
 parser.add_argument('--min-cpn', type=int, dest='Min_completeness', default=35,
                     help='Min completeness of kept bins (default: 35)')
 parser.add_argument('--max-ctn', type=int, dest='Max_contamination', default=20,
@@ -117,7 +117,7 @@ parser.add_argument('--sensitive', type=str, dest='binning_sensitive', default='
 parser.add_argument('-d','--data-feeding-folder', type=str, dest='data_feeding_folder',
                     help='List of folder name of extra binset(s) for data feeding, e.g.: -d binset1_folder_name,binset2_folder_name')
 parser.add_argument('--binset-index', type=str, dest='extra_binset_start_index', default=500,
-                    help='Optional parameter for data feeding. The start index of the extra binset, e.g.: -bi 5. BASALT already set a default index, but if you already had 4 assemblies, the binset start index could be 5')
+                    help='Optional parameter for data feeding. The start index of the extra binset, e.g.: -bi 5. BASALT-Air already set a default index, but if you already had 4 assemblies, the binset start index could be 5')
 # parser.add_argument('--only-refinement', action='store_true', dest='only_refinement',
 #                     help='Only carry out refinement, e.g.: --only-refinement')
 parser.add_argument('-r', '--refinement-binset', type=str, dest='refinement_binset', default='',
@@ -141,26 +141,26 @@ parser.add_argument('-b', '--binsets-list', type=str, dest='binsets_list',
 # ---------------------------------------------------------------------------
 
 _BANNER = r"""
- ____    _    ____    _    _   _____
-| __ )  / \  / ___|  / \  | | |_   _|
-|  _ \ / _ \ \___ \ / _ \ | |   | |
-| |_) / ___ \ ___) / ___ \| |___| |
-|____/_/   \_\____/_/   \_\_____|_|
+ ____    _    ____    _    _   _____        _    ___ ____
+| __ )  / \  / ___|  / \  | | |_   _|      / \  |_ _|  _ \
+|  _ \ / _ \ \___ \ / _ \ | |   | | _____ / _ \  | || |_) |
+| |_) / ___ \ ___) / ___ \| |___| ||_____/ ___ \ | ||  _ <
+|____/_/   \_\____/_/   \_\_____|_|     /_/   \_\___|_| \_\
 """
 
 
 def _print_banner():
-    """Print the BASALT logo + version. CLI-only — never runs at ``import`` time."""
+    """Print the BASALT-Air logo + version. CLI-only — never runs at ``import`` time."""
     from basalt import __version__
     line = _BANNER.rstrip('\n')
-    tag = 'v' + __version__ + '  Metagenomic binning & refinement pipeline'
+    tag = 'BASALT-Air v' + __version__ + '  Metagenomic binning & refinement pipeline'
     print(line)
     print('  ' + tag)
     print()
 
 
 def _fail(msg):
-    sys.stderr.write('[BASALT] ERROR: ' + msg + '\n')
+    sys.stderr.write('[BASALT-Air] ERROR: ' + msg + '\n')
     sys.exit(1)
 
 
@@ -260,7 +260,7 @@ def _write_manifest(manifest, workdir):
             json.dump(manifest, fh, indent=2, default=str)
     except OSError as e:
         sys.stderr.write(
-            '[BASALT] WARNING: could not write run manifest {!r}: {}\n'.format(path, e))
+            '[BASALT-Air] WARNING: could not write run manifest {!r}: {}\n'.format(path, e))
     return path
 
 
@@ -363,7 +363,7 @@ def _link_into_cwd(path):
                 _fail('cannot replace stale symlink {!r}: {}'.format(link, e))
         else:
             sys.stderr.write(
-                '[BASALT] WARNING: cwd already contains {!r}; '
+                '[BASALT-Air] WARNING: cwd already contains {!r}; '
                 'using it instead of {!r}\n'.format(name, abs_path))
             return name
     try:
@@ -405,20 +405,20 @@ def _move_output_to_outdir():
     src = os.path.join(workdir, output_folder)
     if not os.path.isdir(src):
         sys.stderr.write(
-            '[BASALT] WARNING: expected output folder {!r} not found in '
+            '[BASALT-Air] WARNING: expected output folder {!r} not found in '
             'workdir; nothing to move to --outdir\n'.format(output_folder))
         return
     dst = os.path.join(outdir, output_folder)
     if os.path.exists(dst):
         sys.stderr.write(
-            '[BASALT] WARNING: --outdir already contains {!r}; left output '
+            '[BASALT-Air] WARNING: --outdir already contains {!r}; left output '
             'in workdir at {!r}\n'.format(output_folder, src))
         return
     try:
         shutil.move(src, dst)
     except (OSError, shutil.Error) as e:
         sys.stderr.write(
-            '[BASALT] WARNING: could not move {!r} to {!r}: {}; left in '
+            '[BASALT-Air] WARNING: could not move {!r} to {!r}: {}; left in '
             'workdir\n'.format(src, dst, e))
         return
     print('Final output moved to', dst)
@@ -496,7 +496,7 @@ def _dispatch():
     Returns
     -------
     None
-        Side effects include running the end-to-end BASALT pipeline and
+        Side effects include running the end-to-end BASALT-Air pipeline and
         writing results to the specified output folder.
     """
     global pwd, output_folder
@@ -745,7 +745,7 @@ def main():
         log.warning(
             'Missing external tools on PATH: %s. Run "basalt --check-deps" '
             'for the full report. Continuing — failures will surface when '
-            'BASALT shells out to the missing tool.',
+            'BASALT-Air shells out to the missing tool.',
             ', '.join(missing_deps),
         )
 
@@ -767,7 +767,7 @@ def main():
         return
 
     t_start = time.monotonic()
-    log.info('BASALT pipeline started')
+    log.info('BASALT-Air pipeline started')
     try:
         _dispatch()
 
@@ -776,14 +776,14 @@ def main():
     except BaseException as exc:
         elapsed = time.monotonic() - t_start
         log.error(
-            'BASALT pipeline aborted after %s (%s: %s)',
+            'BASALT-Air pipeline aborted after %s (%s: %s)',
             format_elapsed(elapsed), type(exc).__name__, exc,
         )
         _finalise_manifest(manifest_path, 'aborted', elapsed, error=exc)
         raise
     else:
         elapsed = time.monotonic() - t_start
-        log.info('BASALT pipeline finished in %s (%.1f s)', format_elapsed(elapsed), elapsed)
+        log.info('BASALT-Air pipeline finished in %s (%.1f s)', format_elapsed(elapsed), elapsed)
         _finalise_manifest(manifest_path, 'success', elapsed)
 
 

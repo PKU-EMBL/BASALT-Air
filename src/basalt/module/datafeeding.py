@@ -2,7 +2,7 @@
 # -*- coding: UTF-8 -*-
 
 """
-Data-feeding entry point for the BASALT pipeline.
+Data-feeding entry point for the BASALT-Air pipeline.
 
 This module integrates external bin sets into an existing BASALT run,
 re-runs dereplication and outlier removal, and updates the final
@@ -68,7 +68,7 @@ def data_feeding_main(assembly_list, datasets, num_threads, data_feeding_folder,
         x=0
     else:
         print('BASALT models lacking. Start download the model')
-        # os.system('python BASALT_models_download.py')
+        # Legacy standalone downloader replaced by basalt.ml.download.
         from basalt.ml.download import main as _download_models
         _download_models()
 
