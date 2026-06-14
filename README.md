@@ -172,12 +172,12 @@ basalt \
     --outdir /results/output
 ```
 
-For multiple absolute-path paired-end datasets, use `;` between read pairs:
+For multiple absolute-path paired-end datasets, use `" "` and `;` between read pairs:
 
 ```bash
 basalt \
     -a /data/as1.fa,/data/as2.fa \
-    -s /data/s1_R1.fq,/data/s1_R2.fq;/data/s2_R1.fq,/data/s2_R2.fq \
+    -s "/data/s1_R1.fq,/data/s1_R2.fq;/data/s2_R1.fq,/data/s2_R2.fq" \
     -t 64 -m 128
 ```
 
