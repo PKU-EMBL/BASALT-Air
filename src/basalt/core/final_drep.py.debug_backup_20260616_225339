@@ -8,7 +8,7 @@ summary statistics for downstream evaluation.
 """
 
 from Bio import SeqIO
-import sys, os, threading, copy, ast
+import sys, os, threading, copy
 from multiprocessing import Pool
 import pandas as pd
 import numpy as np
@@ -1075,7 +1075,7 @@ def new_selected_bins_generator(selected_bins, eliminated_bins, all_bins_1, all_
     f=open('Iteration_'+str(iteration_num)+'_bin_stats_ext.tsv','w')
     for item in selected_bins.keys():
         if item not in eliminated_bins.keys():
-            all_remain_bins[str(item)]=selected_bins[item]
+            all_remain_bins[str(item)]=str(selected_bins[item])
             #if '_metabat_genomes.' in str(item):
             #    bin_name=str(item).replace('.fa', '')
             #elif '_maxbin2_genomes.' in str(item):
@@ -1088,14 +1088,14 @@ def new_selected_bins_generator(selected_bins, eliminated_bins, all_bins_1, all_
             f.write(str(bin_name)+'\t'+str(selected_bins[item])+'\n')
 
     for item in extract_bins_1.keys():
-        all_remain_bins[str(item)]=extract_bins_1[item]
+        all_remain_bins[str(item)]=str(extract_bins_1[item])
         item_list=item.split('.')
         item_list.remove(item_list[-1])
         bin_name='.'.join(item_list)
         f.write(str(bin_name)+'\t'+str(extract_bins_1[item])+'\n')
 
     for item in extract_bins_2.keys():
-        all_remain_bins[str(item)]=extract_bins_2[item]
+        all_remain_bins[str(item)]=str(extract_bins_2[item])
         item_list=item.split('.')
         item_list.remove(item_list[-1])
         bin_name='.'.join(item_list)
@@ -1105,12 +1105,9 @@ def new_selected_bins_generator(selected_bins, eliminated_bins, all_bins_1, all_
     f=open('Medium_quality_bins_CPN-5CTN_50_iteration_'+str(iteration_num)+'_.txt','w')
     f2=open('High_quality_bins_CPN-5CTN_70_iteration_'+str(iteration_num)+'_.txt','w')
     for item in all_remain_bins.keys():
-        stats = all_remain_bins[item]
-        if not isinstance(stats, dict):
-            stats = ast.literal_eval(str(stats))
-            all_remain_bins[item] = stats
-        cpn = stats['Completeness']
-        ctn = stats['Contamination']
+        cpn=str(all_remain_bins[item]).split('Completeness\': ')[1].split(',')[0]
+        # if str(all_remain_bins[item]).count(',') == 4:
+        ctn=str(all_remain_bins[item]).split('Contamination\': ')[1].split('}')[0]
         quality=float(cpn)-5*float(ctn)
         if quality >= 50:
             f.write(str(item)+'\t'+str(all_remain_bins[str(item)])+'\n')
@@ -1774,13 +1771,9 @@ def initial_drep_final_comparator(final_iteration_folder, Coverage_maxtrix_list,
     f3=open('Highly_quality_bins.txt','w')
     for item in bin_checkm_o.keys():
         if item not in eliminated_bins_checkm.keys():
-            stats = bin_checkm_o[item]
-            if not isinstance(stats, dict):
-                stats = ast.literal_eval(str(stats))
-                bin_checkm_o[item] = stats
-            f.write(str(stats)+'\n')
-            Completeness = stats['Completeness']
-            Contamination = stats['Contamination']
+            f.write(str(bin_checkm_o[item])+'\n')
+            Completeness=str(bin_checkm_o[item]).split('Completeness\': ')[1].split(',')[0]
+            Contamination=str(bin_checkm_o[item]).split('Contamination\': ')[1].split('}')[0]
             delta_value=float(Completeness)-5*float(Contamination)
             if delta_value >= 70:
                 f3.write(str(bin_checkm_o[item])+'\n')
@@ -2223,13 +2216,9 @@ def final_binset_comparator(final_iteration_folder, Coverage_maxtrix_list, datas
     f3=open('Highly_quality_bins.txt','w')
     for item in bin_checkm_o.keys():
         if item not in eliminated_bins_checkm.keys():
-            stats = bin_checkm_o[item]
-            if not isinstance(stats, dict):
-                stats = ast.literal_eval(str(stats))
-                bin_checkm_o[item] = stats
-            f.write(str(stats)+'\n')
-            Completeness = stats['Completeness']
-            Contamination = stats['Contamination']
+            f.write(str(bin_checkm_o[item])+'\n')
+            Completeness=str(bin_checkm_o[item]).split('Completeness\': ')[1].split(',')[0]
+            Contamination=str(bin_checkm_o[item]).split('Contamination\': ')[1].split('}')[0].split(',')[0]
             delta_value=float(Completeness)-5*float(Contamination)
             if delta_value >= 70:
                 f3.write(str(bin_checkm_o[item])+'\n')

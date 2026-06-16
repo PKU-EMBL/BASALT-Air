@@ -8,7 +8,7 @@ before invoking ``multiple_assembly_comparator_main`` to select the QC tool.
 """
 
 from Bio import SeqIO
-import sys, os, threading, copy, ast
+import sys, os, threading, copy
 from multiprocessing import Pool
 import pandas as pd
 import numpy as np
@@ -1327,7 +1327,7 @@ def new_selected_bins_generator(selected_bins, eliminated_bins,
     f.write('Bin_ID'+'\t'+'Genome_size'+'\t'+'Completeness'+'\t'+'Contamination'+'\t'+'N50'+'\n')
     for item in selected_bins.keys():
         if item not in eliminated_bins.keys():
-            all_remain_bins[str(item)]=selected_bins[item]
+            all_remain_bins[str(item)]=str(selected_bins[item])
             #if '_metabat_genomes.' in str(item):
             #    bin_name=str(item).replace('.fa', '')
             #elif '_maxbin2_genomes.' in str(item):
@@ -1341,7 +1341,7 @@ def new_selected_bins_generator(selected_bins, eliminated_bins,
             f.write(str(bin_name)+'\t'+str(selected_bins[item]['Genome size'])+'\t'+str(selected_bins[item]['Completeness'])+'\t'+str(selected_bins[item]['Contamination'])+'\t'+str(selected_bins[item]['N50'])+'\n')
 
     for item in extract_bins_1.keys():
-        all_remain_bins[str(item)]=extract_bins_1[item]
+        all_remain_bins[str(item)]=str(extract_bins_1[item])
         item_list=item.split('.')
         item_list.remove(item_list[-1])
         bin_name='.'.join(item_list)
@@ -1349,7 +1349,7 @@ def new_selected_bins_generator(selected_bins, eliminated_bins,
         f.write(str(bin_name)+'\t'+str(extract_bins_1[item]['Genome size'])+'\t'+str(extract_bins_1[item]['Completeness'])+'\t'+str(extract_bins_1[item]['Contamination'])+'\t'+str(extract_bins_1[item]['N50'])+'\n')
 
     for item in extract_bins_2.keys():
-        all_remain_bins[str(item)]=extract_bins_2[item]
+        all_remain_bins[str(item)]=str(extract_bins_2[item])
         item_list=item.split('.')
         item_list.remove(item_list[-1])
         bin_name='.'.join(item_list)
@@ -1359,12 +1359,8 @@ def new_selected_bins_generator(selected_bins, eliminated_bins,
     f=open('Medium_quality_bins_CPN-5CTN_50_iteration_'+str(iteration_num)+'_.txt','w')
     f2=open('High_quality_bins_CPN-5CTN_70_iteration_'+str(iteration_num)+'_.txt','w')
     for item in all_remain_bins.keys():
-        stats = all_remain_bins[item]
-        if not isinstance(stats, dict):
-            stats = ast.literal_eval(str(stats))
-            all_remain_bins[item] = stats
-        cpn = stats['Completeness']
-        ctn = stats['Contamination']
+        cpn=str(all_remain_bins[item]).split('Completeness\': ')[1].split(',')[0]
+        ctn=str(all_remain_bins[item]).split('Contamination\': ')[1].split('}')[0]
         quality=float(cpn)-5*float(ctn)
         if quality >= 50:
             f.write(str(item)+'\t'+str(all_remain_bins[str(item)])+'\n')
