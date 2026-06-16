@@ -19,7 +19,7 @@ from Bio import SeqIO
 from basalt.steps.s2_bins_abundance_pe_connections import *
 import os
 
-from basalt.qc_backend import get_backend
+from basalt.qc_backend import get_backend, normalise_bin_filename
 
 
 _BACKEND = None
@@ -760,7 +760,7 @@ def binset_filtration(binset):
                 if '_bin_stats_ext.tsv' in file:
                     for line in open(file, 'r'):
                         bin_id=str(line).strip().split('\t')[0]
-                        bin_id_f=bin_id+'.fa'
+                        bin_id_f=normalise_bin_filename(bin_id)
                         bin_checkm.append(bin_id_f)
                         try:
                             marker_lineage=str(line).strip().split('marker lineage\': \'')[1].split('\',')[0]
@@ -783,7 +783,7 @@ def binset_filtration(binset):
                         n+=1
                         if n >= 2:
                             bin_id=str(line).strip().split('\t')[0]
-                            bin_id_f=bin_id+'.fa'
+                            bin_id_f=normalise_bin_filename(bin_id)
                             bin_checkm.append(bin_id_f)
                             try:
                                 Completeness=float(str(line).strip().split('\t')[2].strip())

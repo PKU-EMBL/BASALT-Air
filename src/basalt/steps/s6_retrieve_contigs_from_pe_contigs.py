@@ -15,7 +15,7 @@ from sklearn.decomposition import PCA
 import numpy as np
 from multiprocessing import Pool
 
-from basalt.qc_backend import get_backend
+from basalt.qc_backend import get_backend, normalise_bin_filename, strip_fasta_extension
 from basalt.scripts import path as _script_path
 from basalt.steps.s6p_coverage_filtration import contig_filtration
 from basalt.steps.s6p_run_checkm_taxonomy_wf import checkm_tax_wf
@@ -552,8 +552,9 @@ def _bin_comparison_checkm2(original_bin_folder, new_bins_checkm, new_bin_folder
     bin_checkm, bin_seq_rec, selected_bin = {}, {}, {}
     raw_orig = backend.parse_results(pwd+'/'+str(original_bin_folder))
     for binID, m in raw_orig.items():
-        selected_bin[binID]=1
-        bin_checkm[binID] = {
+        bin_id = strip_fasta_extension(binID)
+        selected_bin[bin_id]=1
+        bin_checkm[bin_id] = {
             'Completeness': float(m.get('Completeness', 0.0)),
             'Genome size': float(m.get('Genome size', 0)),
             'Contamination': float(m.get('Contamination', 0.0)),
@@ -797,7 +798,8 @@ def _bin_comparison_checkm2(original_bin_folder, new_bins_checkm, new_bin_folder
             if lp < 3:
                 refined_metrics = backend.parse_results(pwd+'/Deep_retrieved_bins_split_checkm')
                 os.chdir(pwd+'/Deep_retrieved_bins_split_checkm/')
-                for refined_bin_id, m in refined_metrics.items():
+                for refined_bin_id_raw, m in refined_metrics.items():
+                    refined_bin_id = strip_fasta_extension(refined_bin_id_raw)
                     refined_bin_cpn=float(m.get('Completeness', 0.0))
                     refined_bin_ctn=float(m.get('Contamination', 0.0))
                     refined_delta=refined_bin_cpn-5*refined_bin_ctn
@@ -822,14 +824,14 @@ def _bin_comparison_checkm2(original_bin_folder, new_bins_checkm, new_bin_folder
                             new_bins_checkm[refined_bin_id]['Genome size']=int(m.get('Genome size', 0))
                             new_bins_checkm[refined_bin_id]['contig_size']=float(m.get('contig_size', 0.0))
                             bestbin[org_bin_id][refined_bin_id]=new_bins_checkm[refined_bin_id]
-                            os.system('cp '+pwd+'/Deep_retrieved_bins_split/'+refined_bin_id+'.fa '+pwd+'/'+str(new_bin_folder))
+                            os.system('cp '+pwd+'/Deep_retrieved_bins_split/'+normalise_bin_filename(refined_bin_id)+' '+pwd+'/'+str(new_bin_folder))
                             try:
                                 contigs=contig_num[org_bin_id][int(refined_bin_id.split('_deep_')[1].split('.fa')[0])]
                                 contig_positive[org_bin_id][str(contigs)]=0
                                 fxxx.write(str(org_bin_id)+'\t'+str(contigs)+'\t'+'Positive'+'\n')
                             except:
                                 os.chdir(pwd+'/Deep_retrieved_bins_split')
-                                for record in SeqIO.parse(refined_bin_id+'.fa','fasta'):
+                                for record in SeqIO.parse(normalise_bin_filename(refined_bin_id),'fasta'):
                                     if record.id not in bin_seq_rec[org_bin_id].keys():
                                         try:
                                             contig_positive[org_bin_id][str(record.id)]=0
@@ -852,7 +854,7 @@ def _bin_comparison_checkm2(original_bin_folder, new_bins_checkm, new_bin_folder
                                 fxxx.write(str(org_bin_id)+'\t'+str(contigs)+'\t'+'Neutral'+'\n')
                             except:
                                 os.chdir(pwd+'/Deep_retrieved_bins_split')
-                                for record in SeqIO.parse(refined_bin_id+'.fa','fasta'):
+                                for record in SeqIO.parse(normalise_bin_filename(refined_bin_id),'fasta'):
                                     if record.id not in bin_seq_rec[org_bin_id].keys():
                                         try:
                                             contig_neutral[org_bin_id][str(record.id)]=0
@@ -978,7 +980,8 @@ def _bin_comparison_checkm2(original_bin_folder, new_bins_checkm, new_bin_folder
                     os.system(backend.build_cmd(num_threads, 'Deep_retrieved_bins', 'Deep_retrieved_bins_checkm', ext='fa'))
                     refined_metrics = backend.parse_results(pwd+'/Deep_retrieved_bins_checkm')
                     os.chdir(pwd+'/Deep_retrieved_bins_checkm/')
-                    for refined_bin_id, m in refined_metrics.items():
+                    for refined_bin_id_raw, m in refined_metrics.items():
+                        refined_bin_id = strip_fasta_extension(refined_bin_id_raw)
                         refined_bin_cpn=float(m.get('Completeness', 0.0))
                         refined_bin_ctn=float(m.get('Contamination', 0.0))
                         org_bin_id=refined_bin_id.split('_RT-D')[0]
@@ -1000,7 +1003,7 @@ def _bin_comparison_checkm2(original_bin_folder, new_bins_checkm, new_bin_folder
                             new_bins_checkm[refined_bin_id]['contig_size']=float(m.get('contig_size', 0.0))
                             bestbin[org_bin_id][refined_bin_id]=new_bins_checkm[refined_bin_id]
                             try:
-                                os.system('cp '+pwd+'/Deep_retrieved_bins/'+refined_bin_id+'.fa '+pwd+'/'+str(new_bin_folder))
+                                os.system('cp '+pwd+'/Deep_retrieved_bins/'+normalise_bin_filename(refined_bin_id)+' '+pwd+'/'+str(new_bin_folder))
                             except:
                                 os.system('cp '+pwd+'/Deep_retrieved_bins/'+refined_bin_id+'.fasta '+pwd+'/'+str(new_bin_folder))
                         elif refined_delta == org_delta:
@@ -1020,7 +1023,7 @@ def _bin_comparison_checkm2(original_bin_folder, new_bins_checkm, new_bin_folder
                                         new_bins_checkm[refined_bin_id]['contig_size']=float(m.get('contig_size', 0.0))
                                         bestbin[org_bin_id][refined_bin_id]=new_bins_checkm[refined_bin_id]
                                         try:
-                                            os.system('cp '+pwd+'/Deep_retrieved_bins/'+refined_bin_id+'.fa '+pwd+'/'+str(new_bin_folder))
+                                            os.system('cp '+pwd+'/Deep_retrieved_bins/'+normalise_bin_filename(refined_bin_id)+' '+pwd+'/'+str(new_bin_folder))
                                         except:
                                             os.system('cp '+pwd+'/Deep_retrieved_bins/'+refined_bin_id+'.fasta '+pwd+'/'+str(new_bin_folder))
                     os.chdir(pwd)
@@ -1738,14 +1741,15 @@ def _parse_bin_in_bestbinset_checkm2(assemblies_list, binset, outlier_remover_fo
         try:
             raw = backend.parse_results(pwd+'/'+str(binset)+'_retrieved_checkm')
             for binID, m in raw.items():
-                bins_checkm[binID] = {
+                bin_id = strip_fasta_extension(binID)
+                bins_checkm[bin_id] = {
                     'Completeness': float(m.get('Completeness', 0.0)),
                     'Contamination': float(m.get('Contamination', 0.0)),
                     'Genome size': int(m.get('Genome size', 0)),
                     'contig_size': float(m.get('contig_size', 0.0)),
                 }
                 if 'marker lineage' in m:
-                    bins_checkm[binID]['marker lineage'] = m['marker lineage']
+                    bins_checkm[bin_id]['marker lineage'] = m['marker lineage']
         except Exception as e:
             print('Could not parse retrieved-bins QC results:', e)
         bin_comparison(str(binset), bins_checkm, str(binset)+'_retrieved', refinement_mode, num_threads)
@@ -1767,10 +1771,11 @@ def binset_filtration(binset, pwd, cpn_cutoff, ctn_cutoff):
 
     metrics = backend.parse_results(pwd+'/'+str(binset))
     for binID, m in metrics.items():
+        bin_id = strip_fasta_extension(binID)
         completeness = float(m.get('Completeness', 0.0))
         contamination = float(m.get('Contamination', 0.0))
         if completeness >= int(cpn_cutoff) and contamination < int(ctn_cutoff):
-            filtrated_checkm[binID] = m
+            filtrated_checkm[bin_id] = m
 
     for root, dirs, files in os.walk(pwd+'/'+str(binset)):
         for file in files:
@@ -2352,7 +2357,7 @@ def _bin_comparison_checkm(original_bin_folder, new_bins_checkm, new_bin_folder,
                         new_bins_checkm[refined_bin_id]['marker lineage']=str(line).strip().split('lineage')[1].split('\'')[2].strip()
                         bestbin[org_bin_id][refined_bin_id]=new_bins_checkm[refined_bin_id]
                         try:
-                            os.system('cp '+pwd+'/Deep_retrieved_bins/'+refined_bin_id+'.fa '+pwd+'/'+str(new_bin_folder))
+                            os.system('cp '+pwd+'/Deep_retrieved_bins/'+normalise_bin_filename(refined_bin_id)+' '+pwd+'/'+str(new_bin_folder))
                         except:
                             os.system('cp '+pwd+'/Deep_retrieved_bins/'+refined_bin_id+'.fasta '+pwd+'/'+str(new_bin_folder))
                     elif refined_delta == org_delta:
@@ -2372,7 +2377,7 @@ def _bin_comparison_checkm(original_bin_folder, new_bins_checkm, new_bin_folder,
                                     new_bins_checkm[refined_bin_id]['marker lineage']=str(line).strip().split('lineage')[1].split('\'')[2].strip()
                                     bestbin[org_bin_id][refined_bin_id]=new_bins_checkm[refined_bin_id]
                                     try:
-                                        os.system('cp '+pwd+'/Deep_retrieved_bins/'+refined_bin_id+'.fa '+pwd+'/'+str(new_bin_folder))
+                                        os.system('cp '+pwd+'/Deep_retrieved_bins/'+normalise_bin_filename(refined_bin_id)+' '+pwd+'/'+str(new_bin_folder))
                                     except:
                                         os.system('cp '+pwd+'/Deep_retrieved_bins/'+refined_bin_id+'.fasta '+pwd+'/'+str(new_bin_folder))
 

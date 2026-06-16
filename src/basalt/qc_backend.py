@@ -46,6 +46,29 @@ def _normalise_col(name):
     return name.strip().lower().replace(' ', '').replace('_', '')
 
 
+_FASTA_EXTENSIONS = ('.fa', '.fna', '.fasta')
+
+
+def normalise_bin_filename(bin_id, default_ext='.fa'):
+    """Return a BASALT bin filename, adding a FASTA extension if absent."""
+    bin_id = str(bin_id).strip()
+    if not bin_id:
+        return bin_id
+    if bin_id.lower().endswith(_FASTA_EXTENSIONS):
+        return bin_id
+    return bin_id + default_ext
+
+
+def strip_fasta_extension(bin_id):
+    """Return ``bin_id`` without a trailing FASTA extension if present."""
+    bin_id = str(bin_id).strip()
+    lower = bin_id.lower()
+    for ext in _FASTA_EXTENSIONS:
+        if lower.endswith(ext):
+            return bin_id[:-len(ext)]
+    return bin_id
+
+
 def get_backend(qc_software):
     """
     Factory: return the QC backend instance for the given software name.
@@ -79,6 +102,10 @@ class QCBackend:
         """Path to the results TSV that ``parse_results`` will read."""
         raise NotImplementedError
 
+    def is_results_file(self, fname):
+        """Return True when ``fname`` is a result TSV for this backend."""
+        return fname == self.results_filename
+
     def parse_results(self, containing_folder):
         """
         Walk ``containing_folder`` and parse any results TSV found.
@@ -106,6 +133,11 @@ class CheckM2Backend(QCBackend):
     def results_path(self, output_dir):
         return os.path.join(output_dir, self.results_filename)
 
+    def is_results_file(self, fname):
+        # BASALT writes several flattened CheckM2 summaries such as
+        # Iteration_1_quality_report.tsv and *_BestBinSet_quality_report.tsv.
+        return fname == self.results_filename or fname.endswith('_' + self.results_filename)
+
     def parse_results(self, containing_folder):
         # Two layouts share this filename and both must be read:
         #   * native CheckM2 (14 cols): Name, Completeness, Contamination, ...,
@@ -118,7 +150,7 @@ class CheckM2Backend(QCBackend):
         bins = {}
         for root, _dirs, files in os.walk(containing_folder):
             for fname in files:
-                if fname != self.results_filename:
+                if not self.is_results_file(fname):
                     continue
                 with open(os.path.join(root, fname)) as fh:
                     lines = fh.readlines()

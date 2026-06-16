@@ -12,7 +12,7 @@ import sys, os, threading, copy, math
 import concurrent.futures
 from multiprocessing import Pool
 
-from basalt.qc_backend import get_backend
+from basalt.qc_backend import get_backend, normalise_bin_filename, strip_fasta_extension
 
 
 # Module-level QC backend. Set by the caller (BASALT_main_autobinning / BASALT_main_refinement / BASALT_main_re_assembly)
@@ -111,9 +111,10 @@ def mod_bin(binset_folder):
 
     raw_metrics = backend.parse_results(pwd+'/'+binset_folder)
     for original_name, metrics in raw_metrics.items():
-        if original_name not in mod_bin_dict:
+        original_stem = strip_fasta_extension(original_name)
+        if original_stem not in mod_bin_dict:
             continue
-        mod_name = mod_bin_dict[original_name]
+        mod_name = mod_bin_dict[original_stem]
         bins_checkm[mod_name] = {
             'Completeness': float(metrics.get('Completeness', 0.0)),
             'Contamination': float(metrics.get('Contamination', 0.0)),
@@ -345,7 +346,8 @@ def parse_checkm(checkm_containing_folder, pwd):
     caller having to append ``/storage``.
     """
     backend = _require_backend()
-    return backend.parse_results(os.path.join(pwd, checkm_containing_folder))
+    raw = backend.parse_results(os.path.join(pwd, checkm_containing_folder))
+    return {strip_fasta_extension(bin_id): metrics for bin_id, metrics in raw.items()}
 
 
 def reassembly(bin_seq, reassembly_bin_folder, num_threads, bins_seq_folder,

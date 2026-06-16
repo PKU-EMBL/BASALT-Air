@@ -11,7 +11,7 @@ from Bio import SeqIO
 import sys, os, threading, copy, math
 from multiprocessing import Pool
 
-from basalt.qc_backend import get_backend
+from basalt.qc_backend import get_backend, strip_fasta_extension
 
 
 # Module-level QC backend. Set by the caller (BASALT_main_autobinning / BASALT_main_refinement / BASALT_main_re_assembly)
@@ -44,7 +44,8 @@ def hybrid_parse_checkm(checkm_containing_folder, pwd):
     caller having to append ``/storage``.
     """
     backend = _require_backend()
-    return backend.parse_results(os.path.join(pwd, checkm_containing_folder))
+    raw = backend.parse_results(os.path.join(pwd, checkm_containing_folder))
+    return {strip_fasta_extension(bin_id): metrics for bin_id, metrics in raw.items()}
 
 
 def assembly_mul(bins_seq_folder, bin_seq, item, reassembly_bin_folder,

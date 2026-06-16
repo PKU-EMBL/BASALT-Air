@@ -13,7 +13,7 @@ import os, sys, copy, math, glob, gc
 import numpy as np
 from multiprocessing import Pool
 
-from basalt.qc_backend import get_backend
+from basalt.qc_backend import get_backend, normalise_bin_filename, strip_fasta_extension
 from basalt.scripts import path as _script_path
 
 
@@ -609,44 +609,47 @@ def checkm_eval(bin_contigs, bin_folder, confirmed_outlier, pwd, num_threads):
     refined_raw = backend.parse_results(pwd+'/'+str(outlier_binset)+'_checkm')
     refined_checkm = {}
     for binID, m in refined_raw.items():
-        refined_checkm[binID] = {
+        bin_id = strip_fasta_extension(binID)
+        refined_checkm[bin_id] = {
             'Completeness': float(m.get('Completeness', 0.0)),
             'Genome size': int(m.get('Genome size', 0)),
             'Contamination': float(m.get('Contamination', 0.0)),
             'contig_size': float(m.get('contig_size', 0.0)),
         }
         if 'marker lineage' in m:
-            refined_checkm[binID]['marker lineage'] = m['marker lineage']
+            refined_checkm[bin_id]['marker lineage'] = m['marker lineage']
 
     os.chdir(pwd+'/'+str(bin_folder))
     orig_raw = backend.parse_results(pwd+'/'+str(bin_folder))
     for binID, m in orig_raw.items():
+        bin_id = strip_fasta_extension(binID)
+        bin_file = normalise_bin_filename(bin_id)
         completeness = float(m.get('Completeness', 0.0))
         contamination = float(m.get('Contamination', 0.0))
         contig_size = float(m.get('contig_size', 0.0))
         genome_size = int(m.get('Genome size', 0))
-        if binID in refined_checkm:
+        if bin_id in refined_checkm:
             qua = completeness - 5*contamination
-            refined_qua = refined_checkm[binID]['Completeness'] - 5*refined_checkm[binID]['Contamination']
+            refined_qua = refined_checkm[bin_id]['Completeness'] - 5*refined_checkm[bin_id]['Contamination']
             if qua > refined_qua:
-                os.system('rm '+pwd+'/'+str(outlier_binset)+'/'+binID+'.fa')
-                os.system('cp '+binID+'.fa '+pwd+'/'+str(outlier_binset))
-                refined_checkm[binID]['Completeness'] = completeness
-                refined_checkm[binID]['Contamination'] = contamination
-                refined_checkm[binID]['Genome size'] = genome_size
-                refined_checkm[binID]['contig_size'] = contig_size
+                os.system('rm '+pwd+'/'+str(outlier_binset)+'/'+bin_file)
+                os.system('cp '+bin_file+' '+pwd+'/'+str(outlier_binset))
+                refined_checkm[bin_id]['Completeness'] = completeness
+                refined_checkm[bin_id]['Contamination'] = contamination
+                refined_checkm[bin_id]['Genome size'] = genome_size
+                refined_checkm[bin_id]['contig_size'] = contig_size
                 if 'marker lineage' in m:
-                    refined_checkm[binID]['marker lineage'] = m['marker lineage']
+                    refined_checkm[bin_id]['marker lineage'] = m['marker lineage']
         else:
-            os.system('cp '+binID+'.fa '+pwd+'/'+str(outlier_binset))
-            refined_checkm[binID] = {
+            os.system('cp '+bin_file+' '+pwd+'/'+str(outlier_binset))
+            refined_checkm[bin_id] = {
                 'Completeness': completeness,
                 'Contamination': contamination,
                 'Genome size': genome_size,
                 'contig_size': contig_size,
             }
             if 'marker lineage' in m:
-                refined_checkm[binID]['marker lineage'] = m['marker lineage']
+                refined_checkm[bin_id]['marker lineage'] = m['marker lineage']
 
     os.chdir(pwd+'/'+str(outlier_binset))
     f=open('quality_report.tsv','w')

@@ -15,7 +15,7 @@ import numpy as np
 from sklearn.decomposition import PCA
 import glob
 
-from basalt.qc_backend import get_backend
+from basalt.qc_backend import get_backend, normalise_bin_filename
 from basalt.scripts import path as _script_path
 
 
@@ -405,7 +405,7 @@ def core_contigs_filtration(bin_contig_cov, bin_contig, contig_cov,
     os.chdir(folder_binset)
     for root, dirs, files in os.walk(pwd+'/'+folder_binset):
         for file in files:
-            if file == _require_backend().results_filename:
+            if _require_backend().is_results_file(file):
                 os.system('cp '+file+' '+pwd+'/CC_'+folder_binset)
     os.chdir(pwd)
     return core_contigs2, core_contigs_IQR_ave_coverage
@@ -1082,12 +1082,14 @@ def checkm_connections(binset):
     binset_checkm_connection = {}
     raw = backend.parse_results(pwd+'/'+binset)
     for binID, m in raw.items():
-        bin_id = binID + '.fa'
+        bin_id = normalise_bin_filename(binID)
+        contig_size = float(m.get('contig_size', m.get(backend.contig_size_key, 0.0)))
         binset_checkm_connection[bin_id] = {
             'Completeness': float(m.get('Completeness', 0.0)),
             'Genome size': int(m.get('Genome size', 0)),
             'Contamination': float(m.get('Contamination', 0.0)),
-            'contig_size': float(m.get('contig_size', 0.0)),
+            'contig_size': contig_size,
+            backend.contig_size_key: contig_size,
         }
         if 'marker lineage' in m:
             binset_checkm_connection[bin_id]['marker lineage'] = m['marker lineage']
@@ -1566,13 +1568,15 @@ def parse_checkm(file_or_folder):
     raw = backend.parse_results(folder)
     bin_checkm = {}
     for binID, m in raw.items():
-        bin_id_f = binID + '.fa'
+        bin_id_f = normalise_bin_filename(binID)
         bin_id_f3 = binID.split('.')[0].split('_')[0] + '.fa'
+        contig_size = float(m.get('contig_size', m.get(backend.contig_size_key, 0.0)))
         entry = {
             'Completeness': float(m.get('Completeness', 0.0)),
             'Genome size': float(m.get('Genome size', 0)),
             'Contamination': float(m.get('Contamination', 0.0)),
-            'contig_size': float(m.get('contig_size', 0.0)),
+            'contig_size': contig_size,
+            backend.contig_size_key: contig_size,
         }
         if 'marker lineage' in m:
             entry['marker lineage'] = m['marker lineage']
@@ -1602,7 +1606,7 @@ def _initial_drep_final_comparator_checkm2(final_iteration_folder,
                 if 'fasta' in hz or 'fa' in hz or 'fna' in hz:
                     present_bins[file]=0
             
-                if file == _require_backend().results_filename:
+                if _require_backend().is_results_file(file):
                     bin_checkm.update(parse_checkm(file))
     os.chdir(pwd)
     #print(str(bin_checkm))
@@ -1865,13 +1869,13 @@ def _initial_drep_final_comparator_checkm2(final_iteration_folder,
     os.chdir(pwd+'/'+final_iteration_folder)
     for root, dirs, files in os.walk(pwd+'/'+final_iteration_folder):
         for file in files:
-            if file == _require_backend().results_filename:
+            if _require_backend().is_results_file(file):
                 qua_file[file], n = 0, 0
                 for line in open(file, 'r'):
                     n+=1
                     if n >= 2:
                         bin_id=str(line).strip().split('\t')[0]
-                        bin_id_f=bin_id+'.fa'
+                        bin_id_f=normalise_bin_filename(bin_id)
                         bin_checkm_o[bin_id]=str(line).strip()
                         bin_checkm[bin_id_f]={}
                         bin_checkm[bin_id_f]['Completeness']=float(str(line).strip().split('\t')[2])
@@ -2042,7 +2046,7 @@ def _final_binset_comparator_checkm2(final_iteration_folder,
     y=0
     for root, dirs, files in os.walk(pwd+'/'+final_iteration_folder):
         for file in files:
-            if file == _require_backend().results_filename:
+            if _require_backend().is_results_file(file):
                 y+=1
                 bin_checkm.update(parse_checkm(file))
 
@@ -2291,13 +2295,13 @@ def _final_binset_comparator_checkm2(final_iteration_folder,
     os.chdir(pwd+'/'+final_iteration_folder)
     for root, dirs, files in os.walk(pwd+'/'+final_iteration_folder):
         for file in files:
-            if file == _require_backend().results_filename:
+            if _require_backend().is_results_file(file):
                 qua_file[file], n = 0, 0
                 for line in open(file, 'r'):
                     n+=1
                     if n >= 2:
                         bin_id=str(line).strip().split('\t')[0]
-                        bin_id_f=bin_id+'.fa'
+                        bin_id_f=normalise_bin_filename(bin_id)
                         bin_checkm_o[bin_id]=str(line).strip()
                         bin_checkm[bin_id_f]={}
                         bin_checkm[bin_id_f]['Completeness']=float(str(line).strip().split('\t')[2])
@@ -2468,7 +2472,7 @@ def record_bin_coverage(best_binset_from_multi_assemblies, coverage_file):
     os.chdir(pwd+'/'+str(best_binset_from_multi_assemblies))
     for root, dirs, files in os.walk(pwd+'/'+str(best_binset_from_multi_assemblies)):
         for file in files:
-            if file == results_filename or file.endswith(results_filename):
+            if _require_backend().is_results_file(file):
                 for line in open(file, 'r'):
                     bins=str(line).strip().split('\t')[0]
                     if not bins or bins in ('Bin_ID', 'Name'):
@@ -3429,7 +3433,7 @@ def _initial_drep_final_comparator_checkm(output_folder_name, final_iteration_fo
                 qua_file[file]=0
                 for line in open(file, 'r'):
                     bin_id=str(line).strip().split('\t')[0]
-                    bin_id_f=bin_id+'.fa'
+                    bin_id_f=normalise_bin_filename(bin_id)
                     bin_id_f2=bin_id+'.fasta'
                     bin_checkm_o[bin_id]=str(line).strip()
                     bin_checkm[bin_id_f]={}
@@ -3878,7 +3882,7 @@ def _final_binset_comparator_checkm(final_iteration_folder,
                 qua_file[file]=0
                 for line in open(file, 'r'):
                     bin_id=str(line).strip().split('\t')[0]
-                    bin_id_f=bin_id+'.fa'
+                    bin_id_f=normalise_bin_filename(bin_id)
                     bin_id_f2=bin_id+'.fasta'
                     bin_checkm_o[bin_id]=str(line).strip()
                     bin_checkm[bin_id_f]={}

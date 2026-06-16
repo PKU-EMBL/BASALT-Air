@@ -23,7 +23,7 @@ import numpy as np
 import pandas as pd
 from multiprocessing import Pool
 
-from basalt.qc_backend import get_backend
+from basalt.qc_backend import get_backend, normalise_bin_filename, strip_fasta_extension
 
 
 _BACKEND = None
@@ -968,7 +968,8 @@ def _backend_parse(folder):
     raw = backend.parse_results(folder)
     bin_checkm = {}
     for binID, m in raw.items():
-        bin_checkm[binID] = {
+        bin_id = strip_fasta_extension(binID)
+        bin_checkm[bin_id] = {
             'Completeness': float(m.get('Completeness', 0.0)),
             'Genome size': int(m.get('Genome size', 0)),
             'Contamination': float(m.get('Contamination', 0.0)),
@@ -977,8 +978,12 @@ def _backend_parse(folder):
     return bin_checkm
 
 
-def parse_checkm_1(test_bin_folder_checkm_containning_folder, pwd):
+def parse_checkm_1(test_bin_folder_checkm_containning_folder, pwd=None):
     """Parse QC results in ``test_bin_folder_checkm_containning_folder`` via backend."""
+    if pwd is None:
+        pwd = os.getcwd()
+    if os.path.isabs(test_bin_folder_checkm_containning_folder):
+        return _backend_parse(test_bin_folder_checkm_containning_folder)
     return _backend_parse(pwd+'/'+test_bin_folder_checkm_containning_folder)
 
 

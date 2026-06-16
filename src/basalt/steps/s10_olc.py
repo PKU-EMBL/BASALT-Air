@@ -21,7 +21,7 @@ import numpy as np
 import pandas as pd
 from multiprocessing import Pool
 
-from basalt.qc_backend import get_backend
+from basalt.qc_backend import get_backend, normalise_bin_filename, strip_fasta_extension
 from basalt.scripts import path as _script_path
 
 
@@ -924,7 +924,8 @@ def parse_checkm(test_bin_folder_checkm_containning_folder, pwd):
     raw = backend.parse_results(pwd+'/'+test_bin_folder_checkm_containning_folder)
     bin_checkm = {}
     for binID, m in raw.items():
-        bin_checkm[binID] = {
+        bin_id = strip_fasta_extension(binID)
+        bin_checkm[bin_id] = {
             'Completeness': float(m.get('Completeness', 0.0)),
             'Genome size': int(m.get('Genome size', 0)),
             'Contamination': float(m.get('Contamination', 0.0)),

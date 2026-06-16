@@ -12,7 +12,7 @@ import sys, os, threading, copy, math
 import concurrent.futures
 from multiprocessing import Pool
 
-from basalt.qc_backend import get_backend
+from basalt.qc_backend import get_backend, normalise_bin_filename, strip_fasta_extension
 
 
 _BACKEND = None
@@ -135,9 +135,10 @@ def mod_bin(binset_folder, pwd):
 
     raw_metrics = backend.parse_results(pwd+'/'+binset_folder)
     for original_name, metrics in raw_metrics.items():
-        if original_name not in mod_bin_dict:
+        original_stem = strip_fasta_extension(original_name)
+        if original_stem not in mod_bin_dict:
             continue
-        mod_name = mod_bin_dict[original_name]
+        mod_name = mod_bin_dict[original_stem]
         bins_checkm[mod_name] = {
             'Completeness': float(metrics.get('Completeness', 0.0)),
             'Contamination': float(metrics.get('Contamination', 0.0)),
@@ -920,7 +921,8 @@ def checkm(bin_folder, pwd):
     raw = backend.parse_results(pwd+'/'+str(bin_folder))
     refined_checkm = {}
     for binID, m in raw.items():
-        refined_checkm[binID] = {
+        bin_id = strip_fasta_extension(binID)
+        refined_checkm[bin_id] = {
             'Completeness': float(m.get('Completeness', 0.0)),
             'Genome size': float(m.get('Genome size', 0)),
             'Contamination': float(m.get('Contamination', 0.0)),
@@ -1423,7 +1425,8 @@ def polishing_main(binset_folder, datasets_list, assembly_list, long_read, batch
                         origin_checkm = {}
                         raw_origin = backend.parse_results(pwd+'/'+str(binset_folder))
                         for binID, m in raw_origin.items():
-                            origin_checkm[binID] = {
+                            bin_id = strip_fasta_extension(binID)
+                            origin_checkm[bin_id] = {
                                 'Completeness': float(m.get('Completeness', 0.0)),
                                 'Genome size': float(m.get('Genome size', 0)),
                                 'Contamination': float(m.get('Contamination', 0.0)),
