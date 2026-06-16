@@ -10,7 +10,9 @@ platforms = ["linux-64"]
 # L40S + driver 580 (reports CUDA 13) is forward-compatible with CUDA 12 builds.
 # Users can modify this value based on their CUDA version (e.g., "11", "12", "13")
 [system-requirements]
-cuda = "12"  # Change this to match your CUDA version
+linux = "4.15.0"
+libc = { family = "glibc", version = "2.23" }
+cuda = "12"
 
 # ---------- Conda dependencies (Python + bioinformatics tools) ----------
 [dependencies]
@@ -85,9 +87,9 @@ BASALT-Air = { path = ".", editable = true }
 #   - CHECKM2DB: path to CheckM2 DIAMOND database file
 #   - CHECKM_DATA_PATH: (optional) path to legacy CheckM database
 [activation.env]
-BASALT_WEIGHT = "/path/to/basalt_weights"  # CHANGE THIS: Set your model weights directory
-CHECKM2DB     = "/path/to/checkm2db/CheckM2_database/uniref100.KO.1.dmnd"  # CHANGE THIS: Set your CheckM2 DB path
-# CHECKM_DATA_PATH = "/path/to/checkmdb"   # CHANGE THIS if running -q checkm (legacy CheckM)
+BASALT_WEIGHT = "/home/yuke/db/BASALT"  # CHANGE THIS: Set your model weights directory
+CHECKM2DB     = "/home/yuke/db/checkm2db/uniref100.KO.1.dmnd"  # CHANGE THIS: Set your CheckM2 DB path
+# CHECKM_DATA_PATH = "/home/yuke/db/checkmdb"   # CHANGE THIS if running -q checkm (legacy CheckM)
 
 # ---------- Convenience tasks ----------
 # Run any of these from the repo root with: pixi run <task-name>

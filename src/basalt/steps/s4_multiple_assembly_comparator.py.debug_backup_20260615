@@ -212,14 +212,6 @@ def core_contigs_filtration(bin_contig_cov, bin_contig, contig_cov,
     pwd=os.getcwd()
     print('Filtrating core contigs')
 
-    num_coverage=0
-    for bin_cov in bin_contig_cov.values():
-        for cov_values in bin_cov.values():
-            num_coverage=max(num_coverage, len(cov_values))
-    if num_coverage == 0:
-        print('No bins with coverage detected in '+str(folder_binset)+'. Skipping core contig filtration.')
-        return {}, {}
-
     core_contigs, core_contigs_IQR, core_contigs_IQR_coverage, core_contigs_IQR_ave_coverage ={}, {}, {}, {}
     for bin in bin_contig_cov.keys():
         print('Processing '+str(bin))
@@ -2463,24 +2455,22 @@ def record_bin_coverage(best_binset_from_multi_assemblies, coverage_file):
     pwd=os.getcwd()
 
     #### In some cases, the program accidently stops, causing the bins num in checkm file low that the bins on the folder
-    bin_checkm_temp=set()
-    results_filename=_require_backend().results_filename
+    bin_checkm_temp=[]
     os.chdir(pwd+'/'+str(best_binset_from_multi_assemblies))
     for root, dirs, files in os.walk(pwd+'/'+str(best_binset_from_multi_assemblies)):
         for file in files:
-            if file == results_filename or file.endswith(results_filename):
+            if file == _require_backend().results_filename:
                 for line in open(file, 'r'):
                     bins=str(line).strip().split('\t')[0]
-                    if not bins or bins in ('Bin_ID', 'Name'):
-                        continue
-                    bin_checkm_temp.add(bins)
-                    bin_checkm_temp.add(bins+'.fa')
-                    bin_checkm_temp.add(bins+'.fna')
-                    bin_checkm_temp.add(bins+'.fasta')
-    if bin_checkm_temp:
-        print('Loaded '+str(len(bin_checkm_temp))+' allowed bin names from '+str(results_filename))
-    else:
-        print('No '+str(results_filename)+' found for '+str(best_binset_from_multi_assemblies)+'. Keeping all FASTA bins.')
+                    bin_checkm_temp.append(bins+'.fa')
+                    # bin_checkm_temp.append(bins+'.fasta')
+    
+    for root, dirs, files in os.walk(pwd+'/'+str(best_binset_from_multi_assemblies)):
+        for file in files:
+            hz=file.split('.')[-1]
+            if 'fa' in hz or 'fna' in hz:
+                if str(file) not in bin_checkm_temp:
+                    os.system('rm '+str(file))
     os.chdir(pwd)
     ####
 
@@ -2502,8 +2492,6 @@ def record_bin_coverage(best_binset_from_multi_assemblies, coverage_file):
 
             hz=file.split('.')[-1]
             if 'fa' in hz or 'fna' in hz:
-                if bin_checkm_temp and str(file) not in bin_checkm_temp:
-                    continue
                 m+=1
                 bin_contigs[file]={}
                 bin_contigs_mock[file]={}
@@ -2547,7 +2535,7 @@ def record_bin_coverage(best_binset_from_multi_assemblies, coverage_file):
                 del bin_contigs_mock[bin_name][contig_id]
         
     print('Writing bin coverage matrix file')
-    os.makedirs('bin_coverage', exist_ok=True)
+    os.system('mkdir bin_coverage')
     os.chdir('bin_coverage')
     for bins in bin_contig_cov.keys():
         f=open(bins+'_coverage_matrix.txt', 'w')
@@ -2872,38 +2860,17 @@ def multiple_assembly_comparator_main(Contig_list_o, BestBinSet_list_o,
             flog.close()
 
         CC_binset_list, CC_contig_list, binset_coverage_dict, binset_coverage_total, total_core_contigs =[], [], {}, {}, {}
-        valid_BestBinSet_list, valid_Contig_list, valid_Coverage_list = [], [], []
         for i in range(0, len(BestBinSet_list)):
             binset_folder=BestBinSet_list[i]
             binset_folder2='CC_'+binset_folder
-            coverage_file=Coverage_list[i]
-            contig_file=Contig_list[i]
             if binset_folder2 not in processed:
+                coverage_file=Coverage_list[i]
+                contig_file=Contig_list[i]
                 A=record_bin_coverage(binset_folder, coverage_file)
                 bin_contig_cov=A[0]
                 bin_contig=A[1]
                 contig_cov=A[2]
-                if not bin_contig_cov:
-                    warning='No bins with coverage in '+str(binset_folder)+'. Skipping this binset during initial de-replication.'
-                    print(warning)
-                    try:
-                        flog=open('Basalt_log.txt','a')
-                    except:
-                        flog=open('Basalt_log.txt','w')
-                    flog.write(warning+'\n')
-                    flog.close()
-                    continue
                 core_contigs, core_contigs_IQR_ave_coverage=core_contigs_filtration(bin_contig_cov, bin_contig, contig_cov, binset_folder, contig_file)
-                if not core_contigs:
-                    warning='No core contigs could be generated for '+str(binset_folder)+'. Skipping this binset during initial de-replication.'
-                    print(warning)
-                    try:
-                        flog=open('Basalt_log.txt','a')
-                    except:
-                        flog=open('Basalt_log.txt','w')
-                    flog.write(warning+'\n')
-                    flog.close()
-                    continue
                 binset_coverage_dict['CC_'+contig_file]=core_contigs_IQR_ave_coverage
                 binset_coverage_total.update(core_contigs_IQR_ave_coverage)
                 CC_binset_list.append('CC_'+binset_folder)
@@ -2923,24 +2890,7 @@ def multiple_assembly_comparator_main(Contig_list_o, BestBinSet_list_o,
                     flog=open('Basalt_log.txt','w')
                 flog.write('CC_'+binset_folder+'\t'+'done'+'\n')
                 flog.close()
-            valid_BestBinSet_list.append(binset_folder)
-            valid_Contig_list.append(contig_file)
-            valid_Coverage_list.append(coverage_file)
         fx.close()
-
-        BestBinSet_list=valid_BestBinSet_list
-        Contig_list=valid_Contig_list
-        Coverage_list=valid_Coverage_list
-        contig_num=len(Contig_list)
-        if contig_num == 0:
-            print('Error! There is no qualitied bin with coverage after autobinning process. Please check your data')
-            try:
-                flog=open('Basalt_log.txt','a')
-            except:
-                flog=open('Basalt_log.txt','w')
-            flog.write('Error! There is no qualitied bin with coverage after autobinning process. Please check your data'+'\n')
-            flog.close()
-            return
 
         if contig_num != 1:
             for i in range(1, contig_num):
