@@ -178,29 +178,8 @@ def parse_sam(sam_file, fq, pair, n, num_threads=4):
             continue
         bin_id = flist[2].split('_')[0]
         read_id = flist[0]
-        try:
-            flag = int(flist[1])
-        except ValueError:
-            flag = 0
-
-        base_read_id = read_id
-        read_num = None
-        if flag & 64:
-            read_num = '1'
-        elif flag & 128:
-            read_num = '2'
-        elif read_id.endswith('/1') or read_id.endswith('/2'):
-            base_read_id = read_id[:-2]
-            read_num = read_id[-1]
-        elif read_id.endswith('_1') or read_id.endswith('_2'):
-            base_read_id = read_id[:-2]
-            read_num = read_id[-1]
-        else:
-            read_num = '1'
-
-        if read_id.endswith('/1') or read_id.endswith('/2') or read_id.endswith('_1') or read_id.endswith('_2'):
-            base_read_id = read_id[:-2]
-        rid = str(n) + '_' + base_read_id
+        rid = str(n) + '_' + read_id.split('_')[0]
+        read_num = (str(n) + '_' + read_id).split('_')[-1]
 
         b_pending = pending.setdefault(bin_id, {})
         b_fq = fq.setdefault(bin_id, {})
@@ -210,7 +189,7 @@ def parse_sam(sam_file, fq, pair, n, num_threads=4):
             f_not_mapped_reads.write(rid + '\n')
         else:
             fq_seq = flist[9] + '\n+\n' + flist[10] + '\n'
-            rec = '@' + str(n) + '_' + base_read_id + '/' + read_num + '\n' + fq_seq
+            rec = '@' + (str(n) + '_' + read_id)[:-2] + ' ' + read_num + '\n' + fq_seq
             b_pending.setdefault(rid, []).append((read_num, rec))
             if len(b_pending[rid]) == 2:
                 for rn, r in b_pending[rid]:

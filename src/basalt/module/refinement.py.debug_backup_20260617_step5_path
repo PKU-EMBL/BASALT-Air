@@ -362,7 +362,7 @@ def BASALT_main_refinement(assembly_list, datasets, num_threads, lr_list, hifi_l
                 Contig_recruiter_main(best_binset_from_multi_assemblies, outlier_remover_folder, num_threads, continue_mode, min_cpn, max_ctn, assembly_mo_list, connections_list, coverage_matrix_list, refinement_paramter, pwd, lr_connection_list=lr_connection_list)
                 # Contig_recruiter_main(best_binset_from_multi_assemblies, outlier_remover_folder, num_threads, parameter, cpn_cutoff, ctn_cutoff, assemblies_list, PE_connections_list, lr_connection_list, coverage_matrix_list, refinement_mode, pwd)
                 try:
-                    os.chdir(str(best_binset_from_multi_assemblies)+'_filtrated_retrieved_checkm')
+                    os.chdir(str(best_binset_from_multi_assemblies)+'_retrieved_checkm')
                     n1=0
                     for line in open('quality_report.tsv','r'):
                         n1+=1

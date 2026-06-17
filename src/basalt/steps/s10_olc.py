@@ -15,6 +15,7 @@ try:
     generic_dna_t=1
 except ImportError:
     generic_dna_t=0
+import ast
 import os, copy
 from sklearn.decomposition import PCA
 import numpy as np
@@ -1309,6 +1310,21 @@ def merge(target_bin_folder, target_bin, eliminated_bin_list, target_bin_checkm,
         print('-------------------')
     return best_bin, item
 
+
+def _selected_bin_contamination(line):
+    fields = str(line).strip().split('\t')
+    if len(fields) < 2:
+        raise ValueError('Selected_bins line has too few tab-delimited fields: ' + str(line).strip())
+    try:
+        bin1_factors = ast.literal_eval(fields[-2])
+        bin2_factors = ast.literal_eval(fields[-1])
+    except (SyntaxError, ValueError) as exc:
+        raise ValueError('Cannot parse Selected_bins factor columns: ' + str(line).strip()) from exc
+    try:
+        return float(bin1_factors['Contamination']), float(bin2_factors['Contamination'])
+    except (KeyError, TypeError, ValueError) as exc:
+        raise ValueError('Cannot read Contamination from Selected_bins factor columns: ' + str(line).strip()) from exc
+
 def finding_similar_bins(target_bin_folder, bin_comparison_folder):
     pwd=os.getcwd()
     print('Forming similar bins file')
@@ -1332,8 +1348,7 @@ def finding_similar_bins(target_bin_folder, bin_comparison_folder):
                         x=0
                         bin1=str(line).strip().split('\t')[1].split('---')[0]
                         bin2=str(line).strip().split('\t')[1].split('---')[1]
-                        bin1_ctn=float(eval(str(line).strip().split('Contamination')[1].split(':')[1].split('}')[0].strip()))
-                        bin2_ctn=float(eval(str(line).strip().split('Contamination')[2].split(':')[1].split('}')[0].strip()))
+                        bin1_ctn, bin2_ctn = _selected_bin_contamination(line)
                         if len(bestbinset_sim_bin) != 0:
                             for item in bestbinset_sim_bin.keys():
                                 if bin1 in bestbinset_sim_bin[item].keys() and bin2 not in bestbinset_sim_bin[item].keys():
@@ -1367,8 +1382,7 @@ def finding_similar_bins(target_bin_folder, bin_comparison_folder):
                         x=0
                         bin1=str(line).strip().split('\t')[1].split('---')[0].strip()
                         bin2=str(line).strip().split('\t')[1].split('---')[1].strip()
-                        bin1_ctn=float(eval(str(line).strip().split('Contamination')[1].split(':')[1].split('}')[0].strip()))
-                        bin2_ctn=float(eval(str(line).strip().split('Contamination')[2].split(':')[1].split('}')[0].strip()))
+                        bin1_ctn, bin2_ctn = _selected_bin_contamination(line)
                         if len(bestbinset_sim_bin) != 0:
                             for item in bestbinset_sim_bin.keys():
                                 if bin1 in bestbinset_sim_bin[item].keys() and bin2 not in bestbinset_sim_bin[item].keys():
@@ -1546,18 +1560,19 @@ def reassembly_paired_bins(target_bin_folder, reassembly_binset_folder,
     os.chdir(pwd+'/'+target_bin_folder)
     for root, dirs, files in os.walk(pwd+'/'+target_bin_folder):
         for file in files:
+            xyz = 0
             if '_re-assembly_contigs.fa' in file or '_mag_polished.fa' in file:
                 bestbinset_sim_bin[file]=[]
                 org_bin=str(file).split('_')[0]+'.fa'
                 bestbinset_sim_bin[file].append(org_bin)
 
-                try: ### sometimes, some bins could not be reassembled
-                    if len(reassembly_bins[org_bin]) >= 1:
-                        xyz=1
-                        for item in reassembly_bins[org_bin]:
-                            if item != file:
-                                bestbinset_sim_bin[file].append(item)
-                except:
+                matches = reassembly_bins.get(org_bin, [])
+                if len(matches) >= 1:
+                    xyz=1
+                    for item in matches:
+                        if item != file:
+                            bestbinset_sim_bin[file].append(item)
+                else:
                     print(str(org_bin)+' reassembled bin did not present in rassembly binset. Skip it.')
 
                 if xyz == 1:
@@ -1575,10 +1590,13 @@ def reassembly_paired_bins(target_bin_folder, reassembly_binset_folder,
 
             elif '.fa' in file:
                 bestbinset_sim_bin[file]=[]
-                if len(reassembly_bins[org_bin]) >= 1:
+                matches = reassembly_bins.get(file, [])
+                if len(matches) >= 1:
                     xyz=1
-                    for item in reassembly_bins[file]:
+                    for item in matches:
                         bestbinset_sim_bin[file].append(item)
+                else:
+                    print(str(file)+' reassembled bin did not present in rassembly binset. Skip it.')
 
                 if xyz == 1:
                     xyz1, id_seq = 0, {}
@@ -2012,7 +2030,8 @@ def reassembly_OLC_main(target_bin_folder, step, bin_comparison_folder,
     os.system('rm -rf '+target_bin_folder+'_OLC_checkm')
     os.system(backend.build_cmd(num_threads, target_bin_folder+'_OLC', target_bin_folder+'_OLC_checkm', ext='fa'))
     bin_checkm=parse_checkm(target_bin_folder+'_OLC_checkm', pwd)
-    bin_checkm.update(bestbinset_checkm_org)
+    for _bin_id, _metrics in bestbinset_checkm_org.items():
+        bin_checkm.setdefault(_bin_id, _metrics)
 
     os.chdir(pwd+'/'+target_bin_folder)
     print('Moving bins in original folder to the OLC folder')

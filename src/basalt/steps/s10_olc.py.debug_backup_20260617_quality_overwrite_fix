@@ -2,12 +2,10 @@
 # -*- coding: UTF-8 -*-
 
 """
-Step S8: OLC-based reassembly of selected bins.
+Step S10: OLC-based refinement after reassembly.
 
 Unified entry for CheckM2 and CheckM backends. Call ``set_qc_backend(name)``
-before invoking ``OLC_main`` (CheckM2 entry) or ``OLC_main_checkm``
-(CheckM entry — kept with its original signature for backward compat
-with BASALT_main_re_assembly).
+before invoking ``reassembly_OLC_main`` to select the QC tool.
 """
 
 from Bio import SeqIO
@@ -18,13 +16,14 @@ try:
 except ImportError:
     generic_dna_t=0
 import ast
-import os, copy, glob
+import os, copy
 from sklearn.decomposition import PCA
 import numpy as np
 import pandas as pd
 from multiprocessing import Pool
 
 from basalt.qc_backend import get_backend, normalise_bin_filename, strip_fasta_extension
+from basalt.scripts import path as _script_path
 
 
 _BACKEND = None
@@ -39,7 +38,7 @@ def set_qc_backend(qc_software):
 def _require_backend():
     if _BACKEND is None:
         raise RuntimeError(
-            'S8_OLC: QC backend not set. '
+            'S10_OLC: QC backend not set. '
             "Call set_qc_backend('checkm2' or 'checkm') first."
         )
     return _BACKEND
@@ -48,11 +47,8 @@ def _require_backend():
 def elongate_contig_selector(eliminated_bin, threshold, pwd,
                              eliminated_bin_containing_folder):
     """
-    Select contigs within an eliminated bin that are suitable for OLC elongation.
-
-    This function loads an eliminated bin, computes per-contig coverage,
-    applies PCA-based outlier detection, and writes new bin candidates
-    where contigs marked as outliers are removed.
+    Select contigs within an eliminated bin that are suitable for OLC elongation
+    in the post-reassembly stage (CheckM2 branch).
 
     Parameters
     ----------
@@ -73,7 +69,6 @@ def elongate_contig_selector(eliminated_bin, threshold, pwd,
         removing outlier contigs. The list may be empty if no candidates
         are produced.
     """
-    # def elongate_contig_selector(eliminated_bin, threshold, pwd, eliminated_bin_containing_folder, all_kmer):
     try:
         vs_contig_seq, num_contig, i = {}, 0, 1
         while i <= 3 and len(vs_contig_seq) == 0:
@@ -105,7 +100,7 @@ def elongate_contig_selector(eliminated_bin, threshold, pwd,
 
         pwd=os.getcwd()
         print('Transfroming coverage matrix')
-        os.system('mkdir '+eliminated_bin+'_outlier')
+        os.system('mkdir '+eliminated_bin+'_outliner')
         bin_outlier, coverage_data, contigs_ids, coverage_list={}, {}, [], []
         for contig in contig_cov.keys():
             contigs_ids.append(contig)
@@ -121,51 +116,66 @@ def elongate_contig_selector(eliminated_bin, threshold, pwd,
         A=PCA_slector(coverage_array, num_contig)
         newData=A[0]
         explained_variance_ratio=A[1]
-        # bin_outlier=outliner_remover(eliminated_bin, contigs_ids, threshold, newData, explained_variance_ratio, bin_outlier)
+        # bin_outliner=outliner_remover(eliminated_bin, contigs_ids, threshold, newData, explained_variance_ratio, bin_outlier)
         seperate_outlier=outliner_remover(eliminated_bin, contigs_ids, threshold, newData, explained_variance_ratio, pwd)
         bin_outlier.update(seperate_outlier)
 
-        # print('Calculating TNFs of', eliminated_bin)
-        # bin_TNFs_outlier={}
-        # Bins_TNFs, bin_contig_list = [], []
-        # for contig in vs_contig_seq.keys():
-        #     lis=str(all_kmer[contig]).split('\t')
-        #     bin_contig_list.append(contig)
-        #     for i in range(1, len(lis)):
-        #         Bins_TNFs.append(lis[i])
+        print('Calculating TNFs of', eliminated_bin)
+        vs_contig_seq2={}
+        while i <= 3 and len(vs_contig_seq2) == 0:
+            i+=1
+            os.system('cp '+pwd+'/'+eliminated_bin_containing_folder+'/'+str(eliminated_bin)+' '+pwd)
+            os.system('perl '+_script_path('calc.kmerfreq.pl')+' -i '+str(eliminated_bin)+' -o '+str(eliminated_bin)+'.kmer.txt')
+            for record in SeqIO.parse(eliminated_bin,'fasta'):
+                vs_contig_seq2[record.id]=record.seq
+            if i == 4 and len(vs_contig_seq) == 0:
+                fbin_kmer_record_error=open('Bin_kmer_record_error.txt','a')
+                fbin_kmer_record_error.write('Recorded '+str(eliminated_bin)+' kmer error'+'\n')
+                fbin_kmer_record_error.close()
+        # os.system('perl '+_script_path('calc.kmerfreq.pl')+' -i '+str(eliminated_bin)+' -o '+str(eliminated_bin)+'.kmer.txt')
+        # os.system('perl '+_script_path('calc.kmerfreq.pl')+' -i '+pwd+'/'+eliminated_bin_containing_folder+'/'+eliminated_bin+' -o '+str(eliminated_bin)+'.kmer.txt')
+        bin_TNFs_outlier={}
+        n, Bins_TNFs, bin_contig_list = 0, [], []
+        for line in open(str(eliminated_bin)+'.kmer.txt', 'r'):
+            n+=1
+            if n >= 2:
+                contig=str(line).strip().split('\t')[0]
+                lis=str(line).strip().split('\t')
+                bin_contig_list.append(contig)
+                for i in range(1, len(lis)):
+                    Bins_TNFs.append(lis[i])
 
-        # TNF_array=np.array(Bins_TNFs).reshape((num_contig, 256))
-        # A=PCA_slector(TNF_array, num_contig)
-        # newData=A[0]
-        # explained_variance_ratio=A[1]
-        # seperate_outlier=outliner_remover(eliminated_bin, bin_contig_list, threshold, newData, explained_variance_ratio, pwd)
-        # bin_TNFs_outlier.update(seperate_outlier)
+        TNF_array=np.array(Bins_TNFs).reshape((num_contig, 256))
+        A=PCA_slector(TNF_array, num_contig)
+        newData=A[0]
+        explained_variance_ratio=A[1]
+        seperate_outlier=outliner_remover(eliminated_bin, bin_contig_list, threshold, newData, explained_variance_ratio, pwd)
+        bin_TNFs_outlier.update(seperate_outlier)
 
         f=open('Record_coverage_outlier_'+eliminated_bin+'.txt', 'w')
-        # f1=open('Record_TNFs_outlier_'+eliminated_bin+'.txt', 'w')
+        f1=open('Record_TNFs_outlier_'+eliminated_bin+'.txt', 'w')
         selected_bins=[]
         for item in bin_outlier.keys():
             f.write(str(item)+'\t'+str(bin_outlier[item])+'\n')
-            # f1.write(str(item)+'\t'+str(bin_TNFs_outlier[item])+'\n')
+            f1.write(str(item)+'\t'+str(bin_TNFs_outlier[item])+'\n')
             f2=open(str(item)+'_'+eliminated_bin,'w')
             selected_bins.append(str(item)+'_'+eliminated_bin)
             for item2 in vs_contig_seq.keys():
                 # if item2 not in bin_TNFs_outlier.keys():
-                # if item2 not in bin_outlier[item].keys() and item2 not in bin_TNFs_outlier.keys():
-                if item2 not in bin_outlier[item].keys():
+                if item2 not in bin_outlier[item].keys() and item2 not in bin_TNFs_outlier.keys():
                     f2.write('>'+str(item2)+'\n'+str(vs_contig_seq[item2])+'\n')
             f2.close()
         f.close()  
-        # f1.close()
+        f1.close()
     except:
         selected_bins=[]
-    os.system('mv Record_coverage_outlier_'+eliminated_bin+'.txt '+pwd+'/'+eliminated_bin+'_outlier')
-    # os.system('mv Record_coverage_outlier_'+eliminated_bin+'.txt Record_TNFs_outlier_'+eliminated_bin+'.txt '+pwd+'/'+eliminated_bin+'_outlier')
+    os.system('mv Record_coverage_outlier_'+eliminated_bin+'.txt Record_TNFs_outlier_'+eliminated_bin+'.txt '+pwd+'/'+eliminated_bin+'_outliner')
     return selected_bins
 
 def outliner_remover(bin_id, contigs_ids, threshold, item_data, explained_variance_ratio, pwd):
     """
-    Identify outlier contigs using an IQR-based rule on projected features.
+    Identify outlier contigs using an IQR-based rule on projected features
+    in the post-reassembly OLC step (CheckM2 branch).
 
     Parameters
     ----------
@@ -221,14 +231,14 @@ def outliner_remover(bin_id, contigs_ids, threshold, item_data, explained_varian
         f1.close()
         f2.write(str(four)+'\n'+str('Q1= {0}, Q2= {1}, Q3={2}'.format(four['25%'],four['50%'],four['75%']))+'\n'+'Upper:'+str(upper1)+'\t'+'Lower:'+str(lower1)+'\n'+str(n1)+' outliers in '+str(bin_id)+' under the threshold of '+str(item)+'\n'+'Explained variance ratio:'+str(explained_variance_ratio)+'\n')
         f2.close()
-        os.system('mv Outlier_in_threshold'+str(item)+'_'+str(bin_id)+'.txt Summary_threshold'+str(item)+'_'+str(bin_id)+'.txt '+pwd+'/'+str(bin_id)+'_outlier')
+        os.system('mv Outlier_in_threshold'+str(item)+'_'+str(bin_id)+'.txt Summary_threshold'+str(item)+'_'+str(bin_id)+'.txt '+pwd+'/'+str(bin_id)+'_outliner')
         print(n1, 'outliers in', str(bin_id), 'with threshold of', item)
         print('-------------------------')
     return bin_outlier
 
 def PCA_slector(data_array, num_contig):
     """
-    Project feature matrix to a single principal component.
+    Project feature matrix to a single principal component (post-reassembly).
 
     Parameters
     ----------
@@ -263,7 +273,8 @@ def PCA_slector(data_array, num_contig):
 
 def record_seq(target_bin, eliminated_bin):
     """
-    Concatenate sequences from a target bin and an eliminated bin.
+    Concatenate sequences from a target bin and an eliminated bin
+    in the post-reassembly OLC step (CheckM2 branch).
 
     Parameters
     ----------
@@ -309,14 +320,12 @@ def record_seq(target_bin, eliminated_bin):
         f.write('>'+str(record.id)+'\n'+str(record.seq)+'\n')
     f.close()
 
-    # print(len(target_contig_seq['PB_1-15800'])
     return target_contig_seq, target_contig_len, vs_contig_seq, vs_contig_len, 'Merged_'+target_bin+'_'+eliminated_bin, total_seq, merged_bin_recorded
 
-def blast_1(target_bin, eliminated_bin, target_contig_seq, target_contig_len,
-            vs_contig_seq, vs_contig_len, aligned_len_cutoff,
-            similarity_cutoff, num_threads, blast_name, folder_name):
+def blast_1(target_bin, eliminated_bin, target_contig_seq, target_contig_len, vs_contig_seq, vs_contig_len, aligned_len_cutoff, similarity_cutoff, num_threads, blast_name, folder_name):
     """
-    Run BLAST between target and eliminated bins and group similar contigs.
+    Run BLAST between target and eliminated bins and group similar contigs
+    in the post-reassembly OLC step (CheckM2 branch).
 
     Parameters
     ----------
@@ -351,11 +360,12 @@ def blast_1(target_bin, eliminated_bin, target_contig_seq, target_contig_len,
         groups of contigs that are similar enough to be considered in
         the same OLC elongation group.
     """
-    pwd = os.getcwd()
+    pwd=os.getcwd()
     os.system('makeblastdb -in '+eliminated_bin+' -dbtype nucl -hash_index -parse_seqids -logfile '+eliminated_bin+'_db.txt')
     # os.system('blastn -query '+target_bin+' -db '+eliminated_bin+' -evalue 1e-20 -num_threads '+str(num_threads)+' -outfmt 6 -out '+str(blast_name))
     os.system('blastn -query '+target_bin+' -db '+eliminated_bin+' -evalue 1e-20 -num_threads 1 -outfmt 6 -out '+str(blast_name))
     os.system('rm *_db.txt')
+    # os.system('rm *_db.txt '+str(eliminated_binnin)+'.nin '+str(eliminated_binnin)+'.nhr '+str(eliminated_binnin)+'.nhd '+str(eliminated_binnin)+'.nsi '+str(eliminated_binnin)+'.nsd '+str(eliminated_binnin)+'.nog '+str(eliminated_binnin)+'.nsq '+str(eliminated_binnin)+'.nhi')
 
     f=open(str(blast_name)+'_filtration_1.txt','w')
     f2=open(str(blast_name)+'_filtration_start_end_1.txt','w')
@@ -412,7 +422,8 @@ def blast_1(target_bin, eliminated_bin, target_contig_seq, target_contig_len,
         for line in open(str(blast_name)+'_filtration_start_end_1.txt','r'):
             query=str(line).strip().split('\t')[0]
             subject=str(line).strip().split('\t')[1]
-            if query_id[query] > 1 or subject_id[subject] > 1:
+            # if query_id[query] > 1 or subject_id[subject] > 1:
+            if subject_id[subject] > 1:
                 f.write(str(line))
                 r_query[query]=1
                 alignment_dict[query+' '+subject]=str(line).strip()
@@ -499,35 +510,8 @@ def blast_1(target_bin, eliminated_bin, target_contig_seq, target_contig_len,
     os.system('mv '+str(blast_name)+'_nr_seq.txt '+str(blast_name)+'_filtration_1.txt '+str(blast_name)+'_filtration_start_end_1.txt '+str(blast_name)+'_possible_similar_contig_group.txt '+str(blast_name)+'_filtration_merge_1.txt '+folder_name)
     return blast_group
 
-def elongation_sub_contig(merged_seq, query_seq, iteration_num,
-                          aligned_len_cutoff, similarity_cutoff,
-                          num_threads):
-    """
-    Refine an already merged contig by aligning it back to the query contig.
-
-    Parameters
-    ----------
-    merged_seq : str
-        Path to the FASTA file containing the merged sequence from the
-        previous elongation iteration.
-    query_seq : str
-        Path to the FASTA file of the original query contig.
-    iteration_num : int
-        Current iteration index of the elongation process.
-    aligned_len_cutoff : int
-        Minimum alignment length for BLAST hits.
-    similarity_cutoff : float
-        Minimum percentage identity for BLAST hits.
-    num_threads : int
-        Number of threads for BLAST.
-
-    Returns
-    -------
-    int
-        Status flag indicating whether a further elongation iteration
-        should be attempted (1) or the process should stop (0).
-    """
-    pwd = os.getcwd()
+def elongation_sub_contig(merged_seq, query_seq, iteration_num, aligned_len_cutoff, similarity_cutoff, num_threads):
+    pwd=os.getcwd()
 
     query_len, merged_seq_len=0, 0
     for record in SeqIO.parse(query_seq,'fasta'):
@@ -539,6 +523,7 @@ def elongation_sub_contig(merged_seq, query_seq, iteration_num,
     ### positive direction blast
     os.system('makeblastdb -in '+str(query_seq)+' -dbtype nucl -hash_index -parse_seqids -logfile '+str(query_seq)+'_db.txt')
     os.system('blastn -query '+str(merged_seq)+' -db '+str(query_seq)+' -evalue 1e-20 -num_threads '+str(num_threads)+' -outfmt 6 -out '+str(merged_seq)+'_blast_'+str(iteration_num)+'_'+str(iteration_num)+'.txt')
+    # os.system('rm '+str(query_seq)+'.nin '+str(query_seq)+'.nhr '+str(query_seq)+'.nhd '+str(query_seq)+'.nsi '+str(query_seq)+'.nsd '+str(query_seq)+'.nog '+str(query_seq)+'.nsq '+str(query_seq)+'.nhi')
 
     ### BLAST filtration
     positive_blast, negative_blast, n1, n2, aligned_len1, aligned_len2 = 0, {}, 0, 0, 0, 0
@@ -562,11 +547,12 @@ def elongation_sub_contig(merged_seq, query_seq, iteration_num,
     # os.system('rm *.nhd *.nin *.nsq *.nhr *.nog *.nsd *.nsi *.nhi *.ndb *.nos *.not *.ntf *.nto *.perf '+str(query_seq)+' blast_'+str(iteration_num)+'_'+str(iteration_num)+'.txt')
     return positive_blast
 
-def blast_2(target_bin,target_contig_seq, merged_bin, total_seq, threshold_item, iteration_num, num_threads, folder_name):
+def blast_2(target_bin,target_contig_seq, merged_bin, total_seq, threshold_item, iteration_num, similarity_cutoff, coverage_extension, num_threads, folder_name):
     os.system('makeblastdb -in '+str(merged_bin)+' -dbtype nucl -hash_index -parse_seqids -logfile '+str(merged_bin)+'_db.txt')
     os.system('blastn -query '+str(target_bin)+' -db '+str(merged_bin)+' -evalue 1e-20 -num_threads 1 -outfmt 6 -out blast_'+str(target_bin)+'_self_merged_'+str(threshold_item)+'.txt')
     # os.system('blastn -query '+str(target_bin)+' -db '+str(merged_bin)+' -evalue 1e-20 -num_threads '+str(num_threads)+' -outfmt 6 -out blast_'+str(target_bin)+'_self_merged_'+str(threshold_item)+'.txt')
     os.system('rm *.perf')
+    # os.system('rm '+str(merged_bin)+'.nin '+str(merged_bin)+'.nhr '+str(merged_bin)+'.nhd '+str(merged_bin)+'.nsi '+str(merged_bin)+'.nsd '+str(merged_bin)+'.nog '+str(merged_bin)+'.nsq '+str(merged_bin)+'.nhi')
 
     merged_bin_seq={}
     for record in SeqIO.parse(merged_bin,'fasta'):
@@ -586,7 +572,7 @@ def blast_2(target_bin,target_contig_seq, merged_bin, total_seq, threshold_item,
         identity=similarity*query_aligned_length/len(target_contig_seq[query])
         # if query == '9-6065':
         #     print(identity
-        if identity >= 99:
+        if identity >= similarity_cutoff:
             f.write(line)
             being_merged_contigs[query]=target_contig_seq[query]
             if subject not in being_merged_contigs2.keys():
@@ -613,7 +599,7 @@ def blast_2(target_bin,target_contig_seq, merged_bin, total_seq, threshold_item,
             total_length+=len(total_seq[item2])
         revised_length=int(end) - int(start) + 1
 
-        if 100*total_length/revised_length >= 95:
+        if 100*total_length/revised_length >= int(coverage_extension):
             revised_merged_seq[item]=str(merged_bin_seq[item])[start:end]   
         else:
             removed_merged_seq[item]=str(merged_bin_seq[item])
@@ -694,42 +680,7 @@ def blast_2(target_bin,target_contig_seq, merged_bin, total_seq, threshold_item,
     os.system('mv Filtrated_blast_'+str(target_bin)+'_self_merged_* '+folder_name)
     # os.system('rm *.nhd *.nin *.nsq *.nhr *.nog *.nsd *.nsi *.nhi')
 
-def seq_merge(total_seq, query, subject, query_start, query_end,
-              subject_start, subject_end, num_seq, target_bin):
-    """
-    Merge two contigs based on BLAST alignment coordinates.
-
-    Parameters
-    ----------
-    total_seq : dict
-        Mapping ``contig_id -> sequence`` for all contigs involved in
-        the current OLC operation.
-    query : str
-        Contig ID of the query sequence in the BLAST alignment.
-    subject : str
-        Contig ID of the subject sequence in the BLAST alignment.
-    query_start : int
-        Start position of the alignment on the query contig (1-based).
-    query_end : int
-        End position of the alignment on the query contig (1-based).
-    subject_start : int
-        Start position of the alignment on the subject contig (1-based).
-    subject_end : int
-        End position of the alignment on the subject contig (1-based).
-    num_seq : int
-        Incremental index used when naming merged sequence files.
-    target_bin : str
-        Base name of the target bin currently being elongated.
-
-    Returns
-    -------
-    dict
-        Updated ``total_seq`` mapping including the new merged sequence.
-    dict
-        Mapping ``contig_id -> 1`` for contigs that have been merged.
-    str
-        File name of the merged sequence FASTA written to disk.
-    """
+def seq_merge(total_seq, query, subject, query_start, query_end, subject_start, subject_end, num_seq, target_bin):
     print('Merging sequences')
     processed_contigs={}
     delta_target_seq_alignment=abs(query_end-query_start)+1
@@ -852,25 +803,23 @@ def seq_merge(total_seq, query, subject, query_start, query_end,
     processed_contigs[subject]=1
     return total_seq, processed_contigs, merged_seq, merged_file_name
 
-def elongation_main(blast_filtration_list, total_seq, target_contig_seq, aligned_len_cutoff, similarity_cutoff, num_threads, target_bin):
+def elongation_main(blast_filtration_list, total_seq, target_contig_seq, aligned_len_cutoff, similarity_cutoff, num_threads, target_bin, group_num, elongation_error_filename):
     pwd=os.getcwd()
     merge={}
     ### 1st run of merging
-    processed_contigs, contigs_pool, contigs_query_pool={}, {}, {}
-    contigs_pool['temp'], test, num_seq=1, 0, 0
+    total_num=len(blast_filtration_list)
+    total_iteration=total_num*total_num
+    print(str(target_bin)+' group '+str(group_num)+' elongation started')
+    processed_contigs, contigs_pool, num_seq, iteration, merged_seq_total = {}, {}, 0, 0, {}
+    blast_filtration_list_ori=copy.deepcopy(blast_filtration_list)
     if len(blast_filtration_list) >= 2:
-        while len(contigs_pool) != 0 and test != contigs_pool:
-            test=contigs_pool
-            n=0
+        while len(blast_filtration_list) != 0 and iteration <= total_num:
+            iteration+=1
             for item in blast_filtration_list:
-                n+=1
                 query=str(item).strip().split('\t')[0]
                 subject=str(item).strip().split('\t')[1]
                 contigs_pool[query]=1
-                contigs_query_pool[query]=1
                 contigs_pool[subject]=1
-                if 'temp' in contigs_pool.keys():
-                    del contigs_pool['temp']
 
             n=0
             for item in blast_filtration_list:
@@ -889,16 +838,12 @@ def elongation_main(blast_filtration_list, total_seq, target_contig_seq, aligned
                     A=seq_merge(total_seq, query, subject, query_start, query_end, subject_start, subject_end, num_seq, target_bin)
                     total_seq.update(A[0])
                     processed_contigs.update(A[1])
-                # merge[str(query)+'--'+str(subject)]=str(A[2])
                     merge_seq_name=A[3]
                     del contigs_pool[query]
                     del contigs_pool[subject]
                     blast_filtration_list.remove(item)
-            
-            # print(contigs_pool
-            # print(merge_seq_name
-            num1, num2 = 0, 1
 
+            num1, num2 = 0, 1
             while len(contigs_pool) != 0 and num1 != num2:
                 num1=len(contigs_pool)
                 for item in blast_filtration_list:
@@ -963,10 +908,21 @@ def elongation_main(blast_filtration_list, total_seq, target_contig_seq, aligned
                             blast_filtration_list.remove(item)
                 num2=len(contigs_pool)
 
-def _backend_parse(folder):
-    """Wrap backend.parse_results into the legacy schema used by parse_checkm_*."""
+        if iteration == total_iteration:
+            f_elongation=open(elongation_error_filename,'a')
+            f.write(str(group_num)+'\n')
+            f.close()
+    if len(blast_filtration_list) != 0:
+        fre=open('Remained_unused_blastoutput.txt','a')
+        fre.write(str(str(blast_filtration_list_ori).replace('\t',' '))+'\n'+str(str(blast_filtration_list).replace('\t',' '))+'\n')
+        fre.write(str(target_bin)+' group '+str(group_num)+' elongation end. Orginal blast item NO. '+str(total_num)+'; max iteration NO. '+str(total_iteration)+'; Iteration finished at iteration: '+str(iteration)+'; Remaided blast item: '+str(blast_filtration_list)+'\n')
+        fre.close()
+    print(str(target_bin)+' group '+str(group_num)+' elongation end. Orginal blast item NO. '+str(total_num)+'; max iteration NO. '+str(total_iteration)+'; Iteration finished at iteration: '+str(iteration)+'; Remaided blast item: '+str(blast_filtration_list))
+
+def parse_checkm(test_bin_folder_checkm_containning_folder, pwd):
+    """Parse QC results in ``test_bin_folder_checkm_containning_folder`` using the configured backend."""
     backend = _require_backend()
-    raw = backend.parse_results(folder)
+    raw = backend.parse_results(pwd+'/'+test_bin_folder_checkm_containning_folder)
     bin_checkm = {}
     for binID, m in raw.items():
         bin_id = strip_fasta_extension(binID)
@@ -978,23 +934,7 @@ def _backend_parse(folder):
         }
     return bin_checkm
 
-
-def parse_checkm_1(test_bin_folder_checkm_containning_folder, pwd=None):
-    """Parse QC results in ``test_bin_folder_checkm_containning_folder`` via backend."""
-    if pwd is None:
-        pwd = os.getcwd()
-    if os.path.isabs(test_bin_folder_checkm_containning_folder):
-        return _backend_parse(test_bin_folder_checkm_containning_folder)
-    return _backend_parse(pwd+'/'+test_bin_folder_checkm_containning_folder)
-
-
-def parse_checkm_2(test_bin_folder_checkm_containning_folder):
-    """Same as parse_checkm_1 but takes a folder relative to cwd."""
-    pwd=os.getcwd()
-    return _backend_parse(pwd+'/'+test_bin_folder_checkm_containning_folder)
-    return bin_checkm
-
-def bin_comparison(bin_checkm):
+def bin_comparison(bin_checkm, num):
     pwd=os.getcwd()
     best_bin, best_bin_checkm, n={}, {}, 0
     for item in bin_checkm.keys():
@@ -1005,13 +945,14 @@ def bin_comparison(bin_checkm):
         else:
             delta_cpn_ctn_query=1000000000*(bin_checkm[item]['Completeness']-5*bin_checkm[item]['Contamination'])
             delta_cpn_ctn_subject=1000000000*(bin_checkm[selected_bin]['Completeness']-5*bin_checkm[selected_bin]['Contamination'])
+
             if delta_cpn_ctn_query > delta_cpn_ctn_subject:
                 selected_bin=item
             elif delta_cpn_ctn_query == delta_cpn_ctn_subject:
                 selected_bin_num=selected_bin.count('.')
                 item_num=item.count('.')
                 if int(item_num) > int(selected_bin_num):
-                    #    if bin_checkm[item]['Mean scaffold length'] > bin_checkm[selected_bin]['Mean scaffold length']:
+                # if bin_checkm[item]['Mean scaffold length'] >= bin_checkm[selected_bin]['Mean scaffold length']:
                     selected_bin=item
                 elif int(item_num) == int(selected_bin_num):
                     try:
@@ -1025,18 +966,73 @@ def bin_comparison(bin_checkm):
                     #         selected_bin=item
                     except:
                         xyzzz=0
+
     best_bin_cpn=bin_checkm[selected_bin]['Completeness']
     best_bin_ctn=bin_checkm[selected_bin]['Contamination']
     # best_bin_ml=bin_checkm[selected_bin]['Mean scaffold length']
     best_bin_checkm[selected_bin]=bin_checkm[selected_bin]
 
     #print(selected_bin, 'completeness', best_bin_cpn, 'contamination', best_bin_ctn, 'mean length', best_bin_ml
-    print(selected_bin, 'completeness', best_bin_cpn, 'contamination', best_bin_ctn)
+    print('Selected bin:', selected_bin, 'completeness', best_bin_cpn, 'contamination', best_bin_ctn)
     return selected_bin, best_bin_checkm[selected_bin]
-                
-def OLC_elongation_main(target_bin, eliminated_bin, target_bin_checkm, iteration_num, num, aligned_len_cutoff, similarity_cutoff, num_threads, pwd, eliminated_bin_containing_folder):
+
+def bin_comparison2(bin_checkm):
+    best_bin_checkm, best_bin_checkm2, n= {}, {}, 0
+    for item in bin_checkm.keys():
+        # print(item)
+        if '_genomes.' in item:
+            qz=str(item).split('_genomes.')[0]
+            num=str(item).split('_genomes.')[1].split('.')[0]
+            bin_o_id=str(qz)+'_genomes.'+str(num)
+        else:
+            bin_o_id=str(item).split('.')[0]
+
+        if bin_o_id not in best_bin_checkm.keys():
+            best_bin_checkm2[bin_o_id]=item
+            best_bin_checkm[bin_o_id]=bin_checkm[item]
+        else:
+            delta_cpn_ctn_query=1000000000*(bin_checkm[item]['Completeness']-5*bin_checkm[item]['Contamination'])
+            delta_cpn_ctn_subject=1000000000*(best_bin_checkm[bin_o_id]['Completeness']-5*best_bin_checkm[bin_o_id]['Contamination'])
+
+            if delta_cpn_ctn_query > delta_cpn_ctn_subject:
+                best_bin_checkm2[bin_o_id]=item
+                best_bin_checkm[bin_o_id]=bin_checkm[item]
+            elif delta_cpn_ctn_query == delta_cpn_ctn_subject:
+                selected_bin_num=str(best_bin_checkm2[bin_o_id]).count('.')
+                item_num=item.count('.')
+                if int(item_num) > int(selected_bin_num):
+                # if bin_checkm[item]['Mean scaffold length'] >= bin_checkm[selected_bin]['Mean scaffold length']:
+                    best_bin_checkm2[bin_o_id]=item
+                    best_bin_checkm[bin_o_id]=bin_checkm[item]
+                elif int(item_num) == int(selected_bin_num):
+                    try:
+                        threholds_num=float(item.split('_')[-1].split('.')[0])
+                        if int(threholds_num) == 1:
+                            best_bin_checkm2[bin_o_id]=item
+                            best_bin_checkm[bin_o_id]=bin_checkm[item]
+                    except:
+                        xyzzz=0
+
+        # best_bin_cpn=bin_checkm[selected_bin]['Completeness']
+        # best_bin_ctn=bin_checkm[selected_bin]['Contamination']
+        # best_bin_ml=bin_checkm[selected_bin]['Mean scaffold length']
+        # best_bin_checkm[selected_bin]=bin_checkm[selected_bin]
+
+        #print(selected_bin, 'completeness', best_bin_cpn, 'contamination', best_bin_ctn, 'mean length', best_bin_ml
+        # print('Selected bin:', selected_bin, 'completeness', best_bin_cpn, 'contamination', best_bin_ctn)
+    best_bin_checkm3={}
+    for bin_id in best_bin_checkm2.keys():
+        best_bin_checkm3[best_bin_checkm2[bin_id]]=best_bin_checkm[bin_id]
+    return best_bin_checkm3
+
+def OLC_elongation_main(target_bin, eliminated_bin, target_bin_checkm,
+                        iteration_num, num, aligned_len_cutoff,
+                        similarity_cutoff, coverage_extension,
+                        num_threads, pwd, eliminated_bin_containing_folder,
+                        checkmmode):
     """
-    Perform OLC-based elongation of a single target bin using an eliminated bin.
+    Perform OLC-based elongation of a single target bin using an eliminated bin
+    after reassembly (CheckM2 branch).
 
     Parameters
     ----------
@@ -1056,12 +1052,16 @@ def OLC_elongation_main(target_bin, eliminated_bin, target_bin_checkm, iteration
         Minimum BLAST alignment length to consider for elongation.
     similarity_cutoff : float
         Minimum percentage identity for BLAST alignments.
+    coverage_extension : float
+        Minimum coverage extension threshold when evaluating candidate bins.
     num_threads : int
         Number of threads for BLAST and other CPU-intensive routines.
     pwd : str
         Working directory path.
     eliminated_bin_containing_folder : str
         Folder that contains the eliminated bin FASTA and depth files.
+    checkmmode : str
+        String flag indicating which CheckM workflow is being used.
 
     Returns
     -------
@@ -1075,15 +1075,12 @@ def OLC_elongation_main(target_bin, eliminated_bin, target_bin_checkm, iteration
         Mapping ``bin_name -> dict(contig_id -> int)`` indicating which
         contigs come from original bins and which were recruited.
     """
-    # def OLC_elongation_main(target_bin, eliminated_bin, target_bin_checkm, iteration_num, num, aligned_len_cutoff, similarity_cutoff, num_threads, pwd, eliminated_bin_containing_folder, all_kmer):
     pwd=os.getcwd()
     # try:
     merged_bin_recorded={}
     if num == 0:
         threshold=['1', '1.5', '3']
-        # contig_bin_pool=elongate_contig_selector(eliminated_bin, threshold, pwd, eliminated_bin_containing_folder)
-        # contig_bin_pool=elongate_contig_selector(eliminated_bin, threshold, pwd, eliminated_bin_containing_folder, all_kmer)
-        contig_bin_pool=[eliminated_bin]
+        contig_bin_pool=elongate_contig_selector(eliminated_bin, threshold, pwd, eliminated_bin_containing_folder)
     elif num == 1:
         contig_bin_pool=[eliminated_bin]
 
@@ -1108,6 +1105,9 @@ def OLC_elongation_main(target_bin, eliminated_bin, target_bin_checkm, iteration
             bin_item_head=bin_item.split('.')[0]
             target_bin_head=target_bin.split('.')[0]
             blast_name=str(target_bin_head)+'_'+str(bin_item_head)+'_'+str(xyz)+'.txt'
+            elongation_error_filename=str(target_bin_head)+'_'+str(bin_item_head)+'_elongation_error.txt'
+            f_elongation=open(elongation_error_filename,'w')
+            f_elongation.close()
 
             if num == 0:
                 threshold_item=str(bin_item).split('_')[0]
@@ -1132,7 +1132,25 @@ def OLC_elongation_main(target_bin, eliminated_bin, target_bin_checkm, iteration
                 print('--------------------------')
                 print('Processing contig group', item, 'in', str(target_bin), 'with', str(bin_item))
                 # if n == 78:
-                elongation_main(blast_group[item], total_seq, target_contig_seq, aligned_len_cutoff, similarity_cutoff, num_threads, target_bin)
+                elongation_main(blast_group[item], total_seq, target_contig_seq, aligned_len_cutoff, similarity_cutoff, num_threads, target_bin, item, elongation_error_filename)
+            
+            xyzn, error_num_d = 0, {}
+            for line in open(elongation_error_filename,'r'):
+                xyzn+=1
+                if xyzn >= 1:
+                    error_num=str(line).strip()
+                    error_num_d[error_num]=0
+            
+            f_elongation=open(elongation_error_filename,'w')
+            f_elongation.close()
+            
+            if xyzn >= 1:
+                for item in error_num_d.keys():
+                    n+=1
+                    print('--------------------------')
+                    print('Re-processing contig group', item, 'in', str(target_bin), 'with', str(bin_item))
+                    # if n == 78:
+                    elongation_main(blast_group[item], total_seq, target_contig_seq, aligned_len_cutoff, similarity_cutoff, num_threads, target_bin, item, elongation_error_filename)
 
             name, name_select = {}, {}
             for root, dirs, files in os.walk(pwd):
@@ -1167,7 +1185,7 @@ def OLC_elongation_main(target_bin, eliminated_bin, target_bin_checkm, iteration
                 fxy.close()
                 # os.system('cat *_merged_seq.txt > Merged_'+str(threshold_item)+'_'+target_bin)
 
-                blast_2(target_bin, target_contig_seq, 'Merged_'+str(threshold_item)+'_'+target_bin, total_seq, threshold_item, iteration_num, num_threads, folder_name)
+                blast_2(target_bin, target_contig_seq, 'Merged_'+str(threshold_item)+'_'+target_bin, total_seq, threshold_item, iteration_num, similarity_cutoff, coverage_extension, num_threads, folder_name)
                 os.system('mv Merged_'+str(threshold_item)+'_'+target_bin+' '+folder_name)
                 os.system('tar zcvf '+folder_name+'.tar.gz '+folder_name)
                 os.system('rm -rf '+folder_name)
@@ -1176,7 +1194,7 @@ def OLC_elongation_main(target_bin, eliminated_bin, target_bin_checkm, iteration
                 split_name='.'.join(name_lis)
                 new_name='.'.join(name_lis)+'.'+str(iteration_num)+'_'+str(threshold_item)+'.fa'
                 bin_checkm[split_name]=target_bin_checkm.copy()
-                
+
                 mn+=1
                 bin_contigs[mn]={}
                 bin_contigs2[mn]=str(new_name)
@@ -1208,52 +1226,37 @@ def OLC_elongation_main(target_bin, eliminated_bin, target_bin_checkm, iteration
         else:
             recorded_bin2[bins]=0
 
-    # try:
-    #     if len(merged_files) != 0 and len(recorded_bin2) != 0:
-    #         for bins in recorded_bin2.keys():
-    #             os.system('mv '+str(bins)+' '+target_bin+'_merged')
-    #         os.system('cp '+target_bin+' '+target_bin+'_merged')
+    if len(merged_files) != 0 and len(recorded_bin2) != 0:
+        xline2, xt=0, 0
+        for line in open(target_bin,'r'):
+            xline2+=1
 
-    #         os.system('checkm2 predict -t '+str(num_threads)+' -i '+target_bin+'_merged -x fa -o '+str(target_bin)+'_checkm')
-    #         test_checkm=parse_checkm_2(target_bin+'_checkm')
-    #         # print(test_checkm)
-    #         bin_checkm.update(test_checkm)
-    # except:
-    #     xxyyzz=0
+        os.system('cp '+target_bin+' '+target_bin+'_merged')
 
-    try:
-        if len(merged_files) != 0 and len(recorded_bin2) != 0:
-            xline2, xt=0, 0
-            for line in open(target_bin,'r'):
-                xline2+=1
-            os.system('cp '+target_bin+' '+target_bin+'_merged')
+        for bins in recorded_bin2.keys():
+            xline=0
+            for line in open(bins,'r'):
+                xline+=1
 
-            for bins in recorded_bin2.keys():
-                xline=0
-                for line in open(bins,'r'):
-                    xline+=1
+            if xline < xline2:
+                os.system('mv '+str(bins)+' '+target_bin+'_merged')
+                xt+=1
 
-                if xline < xline2:
-                    os.system('mv '+str(bins)+' '+target_bin+'_merged')
-                    xt+=1
+        if xt > 0:
+            backend = _require_backend()
+            os.system('rm -rf '+str(target_bin)+'_checkm')
+            os.system(backend.build_cmd(1, target_bin+'_merged', str(target_bin)+'_checkm', ext='fa'))
+            test_checkm=parse_checkm(target_bin+'_checkm', pwd)
+            bin_checkm.update(test_checkm)
 
-            if xt > 0:
-                backend = _require_backend()
-                os.system('rm -rf '+str(target_bin)+'_checkm')
-                os.system(backend.build_cmd(1, target_bin+'_merged', str(target_bin)+'_checkm', ext='fa'))
-                test_checkm=parse_checkm_2(target_bin+'_checkm')
-                bin_checkm.update(test_checkm)
-    except:
-        xxyyzz=0
-
-    best_bin=bin_comparison(bin_checkm)
+    best_bin=bin_comparison(bin_checkm, num)
     select_bin_checkm=best_bin[1]
     if best_bin[0] != split_name:
         best_bin_name=best_bin[0]+'.fa'
-        # print(best_bin_name
         os.system('mv '+pwd+'/'+target_bin+'_merged/'+best_bin_name+' '+pwd)
     else:
         best_bin_name=str(target_bin)
+
         # name_lis=str(target_bin).split('.')
         # name_lis.remove(name_lis[-1])
         # target_bin_rename='.'.join(name_lis)+'.fa'
@@ -1271,36 +1274,34 @@ def OLC_elongation_main(target_bin, eliminated_bin, target_bin_checkm, iteration
     #     fbin_record_error.close()
     return best_bin_name, select_bin_checkm, merged_bin_recorded
 
-def merge(target_bin_folder, target_bin, eliminated_bin_list, target_bin_checkm, num, pwd, aligned_len_cutoff, similarity_cutoff, num_threads, mod_bin_folder):
-    # def merge(target_bin_folder, target_bin, eliminated_bin_list, target_bin_checkm, num, pwd, aligned_len_cutoff, similarity_cutoff, num_threads, mod_bin_folder, all_kmer):
+def merge(target_bin_folder, target_bin, eliminated_bin_list, target_bin_checkm, num, pwd, aligned_len_cutoff, similarity_cutoff, coverage_extension, num_threads, orig_binset, bin_comparison_folder, checkmmode):
+    # mod_bin_folder, target_bin_folder = 'BestBinset_outlier_refined_filtrated_retrieved_re-assembly_binset', 'BestBinset_outlier_refined_filtrated_retrieved_re-assembly'
     #pwd=os.getcwd()
     n=0
     for item in eliminated_bin_list:
         merged_bin_recorded={}
-        print('Utilization of', item, ' to elongate', target_bin)
+        print('Utilization of', item, 'to elongate', target_bin)
         if num == 0:
             qz_list=str(item).split('_genomes.')[0].split('_')
             qz_list.remove(qz_list[-1])
             qz_list.remove(qz_list[-1])
             eliminated_bin_containing_folder='_'.join(qz_list)+'_BestBinsSet'
             os.system('cp '+pwd+'/'+eliminated_bin_containing_folder+'/'+str(item)+' '+pwd)
-            if len(mod_bin_folder) != 0:
-                for folder_name in mod_bin_folder:
-                    os.system('cp '+pwd+'/'+folder_name+'/'+str(item)+' '+pwd)
+            if len(orig_binset) != '':
+                os.system('cp '+pwd+'/'+orig_binset+'/'+str(item)+' '+pwd)
         elif num == 1:
-            if '_re-assembly_contigs.fa' in item:
-                os.system('cp '+pwd+'/'+str(target_bin_folder)+'/'+item+' '+pwd)
+            if 're-assembly' not in item:
+                eliminated_bin_containing_folder=orig_binset
             else:
-                mod_folder=target_bin_folder.split('_re-assembly')[0]+'_mod'
-                os.system('cp '+pwd+'/'+str(mod_folder)+'/'+item+' '+pwd)
+                eliminated_bin_containing_folder=bin_comparison_folder
+            os.system('cp '+pwd+'/'+str(eliminated_bin_containing_folder)+'/'+item+' '+pwd)
 
         n+=1
         if n == 1:
-            best_bin=OLC_elongation_main(target_bin, item, target_bin_checkm, n, num, aligned_len_cutoff, similarity_cutoff, num_threads, pwd, eliminated_bin_containing_folder)
-            # best_bin=OLC_elongation_main(target_bin, item, target_bin_checkm, n, num, aligned_len_cutoff, similarity_cutoff, num_threads, pwd, eliminated_bin_containing_folder, all_kmer)
+            best_bin=OLC_elongation_main(target_bin, item, target_bin_checkm, n, num, aligned_len_cutoff, similarity_cutoff, coverage_extension, num_threads, pwd, eliminated_bin_containing_folder, checkmmode)
         else:
-            best_bin=OLC_elongation_main(best_bin[0], item, best_bin[1], n, num, aligned_len_cutoff, similarity_cutoff, num_threads, pwd, eliminated_bin_containing_folder)
-            # best_bin=OLC_elongation_main(best_bin[0], item, best_bin[1], n, num, aligned_len_cutoff, similarity_cutoff, num_threads, pwd, eliminated_bin_containing_folder, all_kmer)
+            print('Use '+item+' to elong '+str(best_bin[0]))
+            best_bin=OLC_elongation_main(best_bin[0], item, best_bin[1], n, num, aligned_len_cutoff, similarity_cutoff, coverage_extension, num_threads, pwd, eliminated_bin_containing_folder, checkmmode)
         os.system('rm '+str(item))
 
         merged_bin_recorded.update(best_bin[2])
@@ -1458,7 +1459,8 @@ def finding_similar_bins(target_bin_folder, bin_comparison_folder):
 
 def mapping(total_fa, datasets_list, fq, num_threads):
     """
-    Map short reads to a combined bin reference and prepare bin-specific FASTQ.
+    Map short reads to a combined bin reference and prepare bin-specific FASTQ
+    in the post-reassembly stage (CheckM2 branch).
 
     Parameters
     ----------
@@ -1484,14 +1486,20 @@ def mapping(total_fa, datasets_list, fq, num_threads):
         os.system('bowtie2 -p '+str(num_threads)+' -x '+str(total_fa)+' -1 '+str(datasets_list[item][0])+' -2 '+str(datasets_list[item][1])+' -S '+str(item)+'.sam -q --no-unal')
         parse_sam(str(item)+'.sam', fq, n)
 
-def reassembly_paired_bins(target_bin_folder):
+def reassembly_paired_bins(target_bin_folder, reassembly_binset_folder,
+                           orig_binset):
     """
-    Group reassembled bins that originate from the same original bin.
+    Group reassembled bins that originate from the same original bin
+    in the post-reassembly OLC stage (CheckM2 branch).
 
     Parameters
     ----------
     target_bin_folder : str
         Folder containing original and reassembled bin FASTA files.
+    reassembly_binset_folder : str
+        Folder holding reassembled bin sequences.
+    orig_binset : str
+        Folder name of the original binset used to derive reassemblies.
 
     Returns
     -------
@@ -1503,71 +1511,106 @@ def reassembly_paired_bins(target_bin_folder):
     pwd=os.getcwd()
     print('Forming similar bins file')
     binset, bestbinset_sim_bin, total_seq, m = {}, {}, {}, 0
-    os.chdir(pwd+'/'+target_bin_folder)
 
-    reassembly_bins=[]
-    for root, dirs, files in os.walk(pwd+'/re-assembly_binset/'):
+    reassembly_bins={}
+    os.chdir(pwd+'/'+str(reassembly_binset_folder))
+    for root, dirs, files in os.walk(pwd+'/'+str(reassembly_binset_folder)):
         for file in files:
-            if '.fa' in file:
-                reassembly_bins.append(file)
-            else:
-                continue
+            if '_re-assembly_contigs.fa' in file:
+                xyz, id_seq = 0, {}
+                for record in SeqIO.parse(file,'fasta'):
+                    xyz+=1
+                    if len(record.seq) != 0:
+                        id_seq[file+'-'+str(xyz)]=str(record.seq)
 
+                print('Re-writing '+str(file))
+                fxyz=open(file,'w')
+                for item in id_seq.keys():
+                    fxyz.write('>'+str(item)+'\n'+str(id_seq[item])+'\n')
+                fxyz.close()
+                    
+                org_bin=str(file).split('_')[0]+'.fa'
+                try:
+                    reassembly_bins[org_bin].append(file)
+                except:
+                    reassembly_bins[org_bin]=[file]
+            elif '_mag_polished.fa' in file:
+                os.system('rm '+file)
+
+    try:
+        os.chdir(pwd+'/'+str(orig_binset))
+        for root, dirs, files in os.walk(pwd+'/'+str(orig_binset)):
+            for file in files:    
+                if '.fa' in file:
+                    xyz1, id_seq = 0, {}
+                    for record in SeqIO.parse(file, 'fasta'):
+                        xyz1+=1
+                        if len(record.seq) != 0:
+                            total_seq[str(file)+'-'+str(xyz1)]=record.seq
+                            id_seq[str(file)+'-'+str(xyz1)]=record.seq
+
+                    print('Re-writing '+str(file))
+                    fxyz=open(file,'w')
+                    for item in id_seq.keys():
+                        fxyz.write('>'+str(item)+'\n'+str(id_seq[item])+'\n')
+                    fxyz.close()
+    except:
+        print(orig_binset, 'dose not exist')
+
+    os.chdir(pwd+'/'+target_bin_folder)
     for root, dirs, files in os.walk(pwd+'/'+target_bin_folder):
         for file in files:
-            bestbinset_sim_bin[file]=[]
-            if '_re-assembly_contigs.fa' in file:
+            xyz = 0
+            if '_re-assembly_contigs.fa' in file or '_mag_polished.fa' in file:
+                bestbinset_sim_bin[file]=[]
                 org_bin=str(file).split('_')[0]+'.fa'
                 bestbinset_sim_bin[file].append(org_bin)
-                if 'SPAdes' in file:
-                    IDBA_bin=org_bin.split('.fa')[0]+'_IDBA_re-assembly_contigs.fa'
-                    megahit_bin=org_bin.split('.fa')[0]+'_megahit_re-assembly_contigs.fa'
-                    if IDBA_bin in reassembly_bins:
-                        bestbinset_sim_bin[file].append(IDBA_bin)
-                    
-                    if megahit_bin in reassembly_bins:
-                        bestbinset_sim_bin[file].append(megahit_bin)
 
-                elif 'IDBA' in file:
-                    SPAdes_bin=org_bin.split('.fa')[0]+'_SPAdes_re-assembly_contigs.fa'
-                    megahit_bin=org_bin.split('.fa')[0]+'_megahit_re-assembly_contigs.fa'
-                    if SPAdes_bin in reassembly_bins:
-                        bestbinset_sim_bin[file].append(SPAdes_bin)
+                matches = reassembly_bins.get(org_bin, [])
+                if len(matches) >= 1:
+                    xyz=1
+                    for item in matches:
+                        if item != file:
+                            bestbinset_sim_bin[file].append(item)
+                else:
+                    print(str(org_bin)+' reassembled bin did not present in rassembly binset. Skip it.')
 
-                    if megahit_bin in reassembly_bins:
-                        bestbinset_sim_bin[file].append(megahit_bin)
-
-                elif 'megahit' in file:
-                    IDBA_bin=org_bin.split('.fa')[0]+'_IDBA_re-assembly_contigs.fa'
-                    SPAdes_bin=org_bin.split('.fa')[0]+'_SPAdes_re-assembly_contigs.fa'
-                    if IDBA_bin in reassembly_bins:
-                        bestbinset_sim_bin[file].append(IDBA_bin)
-
-                    if SPAdes_bin in reassembly_bins:
-                        bestbinset_sim_bin[file].append(SPAdes_bin)
-
-                for record in SeqIO.parse(file, 'fasta'):
-                    total_seq[record.id]=record.seq
-            elif '.fa' in file:
-                IDBA_bin=str(file).split('.fa')[0]+'_IDBA_re-assembly_contigs.fa'
-                SPAdes_bin=str(file).split('.fa')[0]+'_SPAdes_re-assembly_contigs.fa'
-                megahit_bin=str(file).split('.fa')[0]+'_megahit_re-assembly_contigs.fa'
-                xxx=0
-                if IDBA_bin in reassembly_bins:
-                    bestbinset_sim_bin[file].append(IDBA_bin)
-                    xxx=1
-                
-                if SPAdes_bin in reassembly_bins:
-                    bestbinset_sim_bin[file].append(SPAdes_bin)
-                    xxx=1
-
-                if megahit_bin in reassembly_bins:
-                    bestbinset_sim_bin[file].append(megahit_bin)
-                    xxx=1
-
-                if xxx == 1:
+                if xyz == 1:
+                    xyz1, id_seq = 0, {}
                     for record in SeqIO.parse(file, 'fasta'):
-                        total_seq[record.id]=record.seq
+                        xyz1+=1
+                        if len(record.seq) != 0:
+                            total_seq[str(file)+'-'+str(xyz1)]=record.seq
+                            id_seq[str(file)+'-'+str(xyz1)]=record.seq
+                    print('Re-writing '+str(file))
+                    fxyz=open(file,'w')
+                    for item in id_seq.keys():
+                        fxyz.write('>'+str(item)+'\n'+str(id_seq[item])+'\n')
+                    fxyz.close()
+
+            elif '.fa' in file:
+                bestbinset_sim_bin[file]=[]
+                matches = reassembly_bins.get(file, [])
+                if len(matches) >= 1:
+                    xyz=1
+                    for item in matches:
+                        bestbinset_sim_bin[file].append(item)
+                else:
+                    print(str(file)+' reassembled bin did not present in rassembly binset. Skip it.')
+
+                if xyz == 1:
+                    xyz1, id_seq = 0, {}
+                    for record in SeqIO.parse(file, 'fasta'):
+                        xyz1+=1
+                        if len(record.seq) != 0:
+                            total_seq[str(file)+'-'+str(xyz1)]=record.seq
+                            id_seq[str(file)+'-'+str(xyz1)]=record.seq
+
+                    print('Re-writing '+str(file))
+                    fxyz=open(file,'w')
+                    for item in id_seq.keys():
+                        fxyz.write('>'+str(item)+'\n'+str(id_seq[item])+'\n')
+                    fxyz.close()
             else:
                 continue
 
@@ -1577,17 +1620,24 @@ def reassembly_paired_bins(target_bin_folder):
         f.write(str(item)+'\t'+str(bestbinset_sim_bin[item])+'\n')
     f.close()
 
-    print('Obtaining depth file')
-    f=open('Total_contigs_after_OLC_reassembly.fa','w')
-    for item in total_seq.keys():
-        f.write('>'+str(item)+'\n'+str(total_seq[item])+'\n')
-    f.close()
+    try:
+        print('Obtaining depth file')
+        f=open('Total_contigs_after_OLC_reassembly.fa','w')
+        for item in total_seq.keys():
+            f.write('>'+str(item)+'\n'+str(total_seq[item])+'\n')
+        f.close()
+    except:
+        xyz=0
 
     return bestbinset_sim_bin
 
-def mul_threads(item, bestbinset_sim_bin, bestbinset_checkm, step, pwd, aligned_len_cutoff, similarity_cutoff, mod_bin_folder, target_bin_folder, num_threads):
+def mul_threads(item, bestbinset_sim_bin, bestbinset_checkm, step, pwd,
+                aligned_len_cutoff, similarity_cutoff, orig_binset,
+                target_bin_folder, bin_comparison_folder, coverage_extension,
+                num_threads, checkmmode):
     """
-    Worker function for parallel OLC processing of a single bin.
+    Worker function for parallel OLC processing of a single bin
+    in the post-reassembly stage (CheckM2 branch).
 
     Parameters
     ----------
@@ -1608,12 +1658,18 @@ def mul_threads(item, bestbinset_sim_bin, bestbinset_checkm, step, pwd, aligned_
         Minimum alignment length for BLAST-based comparisons.
     similarity_cutoff : float
         Minimum percentage identity for BLAST-based comparisons.
-    mod_bin_folder : str
-        Folder containing the modified binset used for OLC.
+    orig_binset : str
+        Folder name of the original binset.
     target_bin_folder : str
         Folder containing the bins being processed.
+    bin_comparison_folder : str
+        Folder containing bin comparison files.
+    coverage_extension : float
+        Minimum coverage extension threshold when evaluating candidate bins.
     num_threads : int
         Number of worker threads for BLAST and other operations.
+    checkmmode : str
+        String flag indicating which CheckM workflow is being used.
 
     Returns
     -------
@@ -1634,7 +1690,7 @@ def mul_threads(item, bestbinset_sim_bin, bestbinset_checkm, step, pwd, aligned_
 
     # CheckM taxonomy_wf silently drops bins with no detectable markers
     # (common for *_mag_polished.fa). Skip OLC merging for those bins,
-    # keep the file as-is so the pipeline can finish.
+    # keep the file as-is, and mark them processed.
     if checkm_name not in bestbinset_checkm:
         print('No CheckM record for '+str(checkm_name)+', skipping OLC merge for this bin')
         try:
@@ -1642,16 +1698,21 @@ def mul_threads(item, bestbinset_sim_bin, bestbinset_checkm, step, pwd, aligned_
         except OSError:
             pass
         os.system('cp '+pwd+'/'+target_bin_folder+'/'+str(item)+' '+pwd+'/'+target_bin_folder+'_OLC/'+target_bin_rename)
+        if '_re.' in item:
+            item_name=str(item).split('_re.')[0].split('.')[0]
+        else:
+            item_name=str(item).split('.')[0]
+        fx=open(str(checkmmode)+'_processed_bins.txt','a')
+        fx.write(str(item_name)+'.fa finished'+'\n'+str(item_name)+'.fasta finished'+'\n')
+        fx.close()
         return total_selected_bin, total_selected_bin_checkm, remove_bin
 
     os.system('cp '+pwd+'/'+target_bin_folder+'/'+str(item)+' '+pwd+'/'+target_bin_rename)
     os.system('mv '+pwd+'/'+target_bin_folder+'/'+str(item)+' '+pwd+'/'+target_bin_folder+'_temp')
     if step == 'assemblies_OLC':
-        best_bin, rm_bin=merge(target_bin_folder, target_bin_rename, bestbinset_sim_bin[item], bestbinset_checkm[checkm_name], 0, pwd, aligned_len_cutoff, similarity_cutoff, num_threads, mod_bin_folder)
-        # best_bin, rm_bin=merge(target_bin_folder, target_bin_rename, bestbinset_sim_bin[item], bestbinset_checkm[checkm_name], 0, pwd, aligned_len_cutoff, similarity_cutoff, num_threads, mod_bin_folder, all_kmer)
+        best_bin, rm_bin=merge(target_bin_folder, target_bin_rename, bestbinset_sim_bin[item], bestbinset_checkm[checkm_name], 0, pwd, aligned_len_cutoff, similarity_cutoff, coverage_extension, num_threads, orig_binset, bin_comparison_folder, checkmmode)
     elif step == 'OLC_after_reassembly':
-        best_bin, rm_bin=merge(target_bin_folder, target_bin_rename, bestbinset_sim_bin[item], bestbinset_checkm[checkm_name], 1, pwd, aligned_len_cutoff, similarity_cutoff, num_threads, mod_bin_folder)
-        # best_bin, rm_bin=merge(target_bin_folder, target_bin_rename, bestbinset_sim_bin[item], bestbinset_checkm[checkm_name], 1, pwd, aligned_len_cutoff, similarity_cutoff, num_threads, mod_bin_folder, all_kmer)
+        best_bin, rm_bin=merge(target_bin_folder, target_bin_rename, bestbinset_sim_bin[item], bestbinset_checkm[checkm_name], 1, pwd, aligned_len_cutoff, similarity_cutoff, coverage_extension, num_threads, orig_binset, bin_comparison_folder, checkmmode)
     ###
     remove_bin[rm_bin]=0
 
@@ -1673,380 +1734,18 @@ def mul_threads(item, bestbinset_sim_bin, bestbinset_checkm, step, pwd, aligned_
             total_selected_bin_checkm[selected_bin_checkm_name]=bestbinset_checkm[selected_bin_checkm_name]
     os.system('cp '+selected_bin+' '+target_bin_folder+'_OLC')
 
+    if '_re.' in item:
+        item_name=str(item).split('_re.')[0].split('.')[0]
+    else:
+        item_name=str(item).split('.')[0]
+    fx=open(str(checkmmode)+'_processed_bins.txt','a')
+    fx.write(str(item_name)+'.fa finished'+'\n'+str(item_name)+'.fasta finished'+'\n')
+    fx.close()
     return total_selected_bin, total_selected_bin_checkm, remove_bin
-
-def OLC_main(target_bin_folder, step, bin_comparison_folder,
-             aligned_len_cutoff, similarity_cutoff, coverage_extension,
-             num_threads, mod_bin_folder):
-    """
-    High-level driver for the S8 OLC reassembly step (CheckM2 branch).
-
-    Parameters
-    ----------
-    target_bin_folder : str
-        Folder containing the bins to be processed by OLC.
-    step : {'assemblies_OLC', 'OLC_after_reassembly'}
-        Pipeline step indicating whether OLC is applied to assemblies
-        or to previously reassembled bins.
-    bin_comparison_folder : str
-        Folder containing CheckM-derived bin comparison results.
-    aligned_len_cutoff : int
-        Minimum alignment length for sequence comparisons.
-    similarity_cutoff : float
-        Minimum percentage identity for sequence comparisons.
-    coverage_extension : float
-        Minimum coverage extension threshold used when assessing bin
-        improvements after OLC.
-    num_threads : int
-        Number of parallel worker processes to spawn.
-    mod_bin_folder : str
-        Folder containing the modified binset used for OLC.
-
-    Returns
-    -------
-    None
-        Writes updated bins, CheckM reports, and comparison summaries
-        to disk; the function coordinates per-bin workers and does not
-        return Python objects.
-    """
-    pwd=os.getcwd()
-    ferror=open('OLC_merged_error_blast_results.txt','w')
-    ferror.close()
-    fblasterror=open('BLAST_output_error.txt','w')
-    fblasterror.close()
-    fbin_record_error=open('Bin_record_error.txt','w')
-    fbin_record_error.close()
-
-    # Snapshot the *current* input binset fresh so the "nothing merged" fallback
-    # below restores exactly the binset we were handed. We must NOT reuse a
-    # pre-existing same-named folder: refinement creates
-    # BestBinset_outlier_refined_filtrated_retrieved_backup BEFORE the 2nd
-    # de-replication, and that orphan snapshot still contains the bins S6
-    # removed -- reusing it here would silently revive de-replicated bins.
-    os.system('rm -rf '+target_bin_folder+'_backup')
-    os.system('cp -r '+target_bin_folder+' '+target_bin_folder+'_backup')
-
-    accomplished_bins={}
-    try:
-        os.mkdir(target_bin_folder+'_OLC')
-    except:
-        print(target_bin_folder+'_OLC Exists. Reading bins in the folder.')
-        # os.system('rm -rf '+target_bin_folder+'_OLC')
-        # os.mkdir(target_bin_folder+'_OLC')
-        os.chdir(target_bin_folder+'_OLC')
-        x,y=0,0
-        for root, dirs, files in os.walk(pwd+'/'+target_bin_folder+'_OLC'):
-            for file in files:
-                try:
-                    hz=str(file).split('.')[-1]
-                    if 'fa' in hz:
-                        if 'genomes' in file:
-                            file_name_qz=str(file).split('_genomes.')[0]
-                            file_name_num=str(file).split('_genomes.')[1].split('.')[0]
-                            file_name=file_name_qz+'_genomes.'+str(file_name_num)
-                            accomplished_bins[file_name+'.fa']=0
-                            accomplished_bins[file_name+'.fasta']=0
-                        x+=1
-                except:
-                    y=0
-        print(str(x),'bin(s) finished OLC')
-        os.chdir(pwd)
-
-    try:
-        os.mkdir(target_bin_folder+'_temp')
-    except:
-        # os.system('rm -rf '+target_bin_folder+'_temp')
-        # os.mkdir(target_bin_folder+'_temp')
-        os.chdir(target_bin_folder+'_temp')
-        x,y=0,0
-        for root, dirs, files in os.walk(pwd+'/'+target_bin_folder+'_temp'):
-            for file in files:
-                try:
-                    hz=str(file).split('.')[-1]
-                    if 'fa' in hz:
-                        os.system('mv '+str(file)+' '+pwd+'/'+target_bin_folder)
-                        x+=1
-                except:
-                    y=0
-        print(str(x),' were moved back to the target bin folder')
-        os.chdir(pwd)
-
-    bestbinset_checkm_org={}
-    bestbinset_checkm=parse_checkm_1(target_bin_folder, pwd)
-    bestbinset_checkm_org.update(bestbinset_checkm)
-    # print(bestbinset_checkm
-
-    if step == 'assemblies_OLC':
-        bestbinset_sim_bin=finding_similar_bins(target_bin_folder, bin_comparison_folder)
-    elif step == 'OLC_after_reassembly':
-        bestbinset_sim_bin=reassembly_paired_bins(target_bin_folder)
-    else:
-        print('step parameter error!')
-    
-    bestbinset_sim_bin2={}
-    bestbinset_sim_bin2=copy.deepcopy(bestbinset_sim_bin)
-    for item in bestbinset_sim_bin2.keys():
-        if len(bestbinset_sim_bin2[item]) == 0:
-            del bestbinset_sim_bin[item]
-
-    # print('Reading kmer files')
-    # kmer_list=glob.glob(r'*.kmer.txt')
-    # all_kmer={}
-    # for item in kmer_list:
-    #     n=0
-    #     for line in open(item, 'r'):
-    #         n+=1
-    #         if n >= 2:
-    #             contig=str(line).strip().split('\t')[0]
-    #             all_kmer[contig]=str(line).strip()
-
-    xyzzz=0
-    if len(bestbinset_sim_bin) >= 5:
-        print('Multiple threads started')
-        pool=Pool(processes=num_threads)
-        result, remove_bin = {}, {}
-        for item in bestbinset_sim_bin:
-            if item not in accomplished_bins.keys():
-                print('Processing '+str(item))
-                # result[item]=pool.apply_async(mul_threads, args=(item, bestbinset_sim_bin, bestbinset_checkm, step, pwd, aligned_len_cutoff, similarity_cutoff, mod_bin_folder, target_bin_folder, num_threads, all_kmer))
-                result[item]=pool.apply_async(mul_threads, args=(item, bestbinset_sim_bin, bestbinset_checkm, step, pwd, aligned_len_cutoff, similarity_cutoff, mod_bin_folder, target_bin_folder, num_threads,))
-                # total_selected_bin, total_selected_bin_checkm, remove_bin=mul_threads(item, bestbinset_sim_bin, bestbinset_checkm, step, pwd, aligned_len_cutoff, similarity_cutoff, mod_bin_folder, target_bin_folder, num_threads, all_kmer)
-        pool.close()
-        pool.join()
-
-        result2={}
-        for item in result:
-            result2[item]=result[item].get()
-
-        total_selected_bin, total_selected_bin_checkm, remove_bin={}, {}, {}
-        for item in result2.keys():
-            total_selected_bin.update(result2[item][0])
-            total_selected_bin_checkm.update(result2[item][1])
-            remove_bin.update(result2[item][2])
-        
-        for item in remove_bin.keys():
-            os.system('rm '+item)
-        print('Multiple threads ended')
-        xyzzz=1
-    elif len(bestbinset_sim_bin) != 0:
-        remove_bin = {}
-        for item in bestbinset_sim_bin:
-            if item not in accomplished_bins.keys():
-                print('Processing '+str(item))
-                total_selected_bin, total_selected_bin_checkm, remove_bin=mul_threads(item, bestbinset_sim_bin, bestbinset_checkm, step, pwd, aligned_len_cutoff, similarity_cutoff, mod_bin_folder, target_bin_folder, num_threads)
-
-        for item in remove_bin.keys():
-            os.system('rm '+item)
-        xyzzz=1
-    else:
-        print('There is no qualified redundent bin')
-
-    if xyzzz == 1:
-        OLC_bins={}
-        os.chdir(pwd+'/'+target_bin_folder+'_OLC/')
-        for root, dirs, files in os.walk(pwd+'/'+target_bin_folder+'_OLC/'):
-            for file in files:
-                hz=str(file).split('.')[-1]
-                if 'fa' in  hz:
-                    n, x=0, 0
-                    for line in open(file,'r'):
-                        n+=1
-                        if n == 2:
-                            x=1
-                            break
-                    
-                    if x == 1:
-                        qz=str(file).split('_genomes.')[0]
-                        bin_num=str(file).split('_genomes.')[1].split('.')[0]
-                        target_bin_rename=qz+'_genomes.'+str(bin_num)+'.fa'
-                        target_bin_rename2=qz+'_genomes.'+str(bin_num)+'.fasta'
-                        OLC_bins[target_bin_rename]=0
-                        OLC_bins[target_bin_rename2]=0
-
-
-        for root, dirs, files in os.walk(pwd+'/'+target_bin_folder+'_temp'):
-            for file in files:
-                if '.fa' in  file:
-                    os.system('mv '+pwd+'/'+target_bin_folder+'_temp/'+file+' '+pwd+'/'+target_bin_folder)
-
-        os.chdir(pwd+'/'+target_bin_folder)
-        for root, dirs, files in os.walk(pwd+'/'+target_bin_folder):
-            for file in files:
-                hz=str(file).split('.')[-1]
-                if 'fa' in  hz:
-                    if file not in OLC_bins.keys():
-                        name_lis=str(file).split('.')
-                        name_lis.remove(name_lis[-1])
-                        target_bin_checkm_name='.'.join(name_lis)
-                        target_bin_rename=target_bin_checkm_name+'.fa'
-                        print('Moved', file, 'to the selected bins pool')
-                        os.system('cp '+file+' '+pwd+'/'+target_bin_folder+'_OLC/'+target_bin_rename)
-                        total_selected_bin_checkm[target_bin_checkm_name]=bestbinset_checkm[target_bin_checkm_name]
-
-        os.chdir(pwd)
-        backend = _require_backend()
-        os.system('rm -rf '+target_bin_folder+'_OLC_checkm')
-        os.system(backend.build_cmd(num_threads, target_bin_folder+'_OLC', target_bin_folder+'_OLC_checkm', ext='fa'))
-        src_results = backend.results_path(pwd+'/'+target_bin_folder+'_OLC_checkm')
-        if os.path.exists(src_results):
-            os.system('cp '+src_results+' '+pwd+'/'+target_bin_folder+'_OLC/OLC_'+backend.results_filename)
-
-        os.chdir(pwd+'/'+target_bin_folder+'_OLC')
-        max_num=0
-        for root, dirs, files in os.walk(pwd+'/'+target_bin_folder+'_OLC'):
-            for file in files:            
-                hz=str(file).split('.')[-1]
-                if 'fa' in hz:
-                    iteration_num=int(str(file).split('_')[0])
-                    if iteration_num > max_num:
-                        max_num=iteration_num
-        
-        os.chdir(pwd+'/'+target_bin_folder)
-        assemblies_name={}
-        for root, dirs, files in os.walk(pwd+'/'+target_bin_folder+'_OLC'):
-            for file in files:            
-                hz=str(file).split('.')[-1]
-                if 'fa' in hz:
-                    name_list=str(file).split('.')
-                    name_list.remove(name_list[-1])
-                    name_list.remove(name_list[-1])
-                    name_join='.'.join(name_list)
-                    assemblies_name[name_join]=0
-        os.chdir(pwd)
-    else:
-        os.chdir(pwd)
-        os.system('rm -rf '+target_bin_folder+'_OLC')
-        # OLC found nothing to merge: pass the original binset through unchanged.
-        # Prefer the entry-time snapshot; fall back to the live folder if the
-        # backup is somehow absent, so _OLC is never left empty when bins exist.
-        if os.path.exists(target_bin_folder+'_backup'):
-            os.system('cp -r '+target_bin_folder+'_backup '+target_bin_folder+'_OLC')
-        else:
-            os.system('cp -r '+target_bin_folder+' '+target_bin_folder+'_OLC')
-
-    # Drop the entry-time snapshot now that _OLC is finalised, so a stale backup
-    # is never left behind for a later step to misread (OLC_main_checkm consumes
-    # its backup with mv; OLC_main used cp and previously leaked it).
-    os.system('rm -rf '+target_bin_folder+'_backup')
-
-    os.system('rm *_db.txt')
-    os.system('rm *.nsq')
-    os.system('rm *.nin')
-    os.system('rm *.nsi')
-    os.system('rm *.nsd')
-    os.system('rm *.nog')
-    os.system('rm *.nhr')
-    os.system('rm *.nhi')
-    os.system('rm *.nhd')
-    try:
-        for i in range(1, max_num+1):
-            os.system('rm Merged_'+str(i)+'*')
-            os.system('rm Merged_seqs_'+str(i)+'*')
-            os.system('rm *'+str(i)+'_merged_seq.txt')
-            os.system('rm Filtrated_blast_'+str(i)+'_*')
-            os.system('rm blast_'+str(i)+'_*')
-            thresholds=[1, 1.5, 3]
-            for item in thresholds:
-                os.system('rm '+str(item)+'_'+str(i)+'_*')
-    except:
-        xyz=0
-    
-    try:
-        for item in assemblies_name.keys():
-            os.system('rm '+str(item)+'.*')
-    except:
-        xyz=0
-
-    os.system('rm -rf *.fa_checkm')
-    os.system('rm -rf *.fa_merged')
-    os.system('rm -rf *.kmer.txt')
-    os.system('rm -rf *.perf')
-    os.system('rm -rf *_split_blast_output')
-    os.system('rm *_split_blast_output.txt')
-    os.system('rm -rf *_outlier')
-    os.system('rm *_merged_seq.txt')
-    os.system('rm -rf Merged_seqs_*')
-    os.system('rm -rf *.ntf *.not *.nos *.njs *.ndb *.nto')
-
-    print('Done!')
-
-if __name__ == '__main__': 
-    ### 1st OLC folder
-    # target_bin_folder='BestBinset_outlier_refined_filtrated_retrieved'
-    target_bin_folder='BestBinset_outlier_refined_filtrated_retrieved'
-    bin_comparison_folder='BestBinset_comparison_files'
-    step='assemblies_OLC'
-
-    ### re-assembly folder
-    #target_bin_folder='BestBinset_outlier_refined_t14_retrieved_total'
-    #step='OLC_after_reassembly' ### 'assemblies_OLC' or 'OLC_after_reassembly' ; 'assemblies_OLC' means 1st OLC; 'OLC_after_reassembly' means OLC after reassembly
-    #bin_comparison_folder='' ### if 'assemblies_OLC', folder bin_comparison_folder is needed; else if 'assemblies_OLC', the folder is not needed, just let it blank
-
-    ### refinement mode needs to provide this folder list; if basalt start from autobinner, you shall let the following list blank
-    # mod_bin_folder=['1_cat_bins','2_S001_bins','3_S002_bins']
-    mod_bin_folder=[]
-    
-    num_threads=30
-    aligned_len_cutoff=200
-    similarity_cutoff=99
-    coverage_extension=95
-    OLC_main(target_bin_folder, step, bin_comparison_folder, aligned_len_cutoff, similarity_cutoff, coverage_extension, num_threads, mod_bin_folder)
-
-
-# --- CheckM-specific helpers (used only when backend=="checkm") ----------
-
-def bin_comparison2(bin_checkm):
-    best_bin_checkm, best_bin_checkm2, n= {}, {}, 0
-    for item in bin_checkm.keys():
-        # print(item)
-        if '_genomes.' in item:
-            qz=str(item).split('_genomes.')[0]
-            num=str(item).split('_genomes.')[1].split('.')[0]
-            bin_o_id=str(qz)+'_genomes.'+str(num)
-        else:
-            bin_o_id=str(item).split('.')[0]
-
-        if bin_o_id not in best_bin_checkm.keys():
-            best_bin_checkm2[bin_o_id]=item
-            best_bin_checkm[bin_o_id]=bin_checkm[item]
-        else:
-            delta_cpn_ctn_query=1000000000*(bin_checkm[item]['Completeness']-5*bin_checkm[item]['Contamination'])
-            delta_cpn_ctn_subject=1000000000*(best_bin_checkm[bin_o_id]['Completeness']-5*best_bin_checkm[bin_o_id]['Contamination'])
-
-            if delta_cpn_ctn_query > delta_cpn_ctn_subject:
-                best_bin_checkm2[bin_o_id]=item
-                best_bin_checkm[bin_o_id]=bin_checkm[item]
-            elif delta_cpn_ctn_query == delta_cpn_ctn_subject:
-                selected_bin_num=str(best_bin_checkm2[bin_o_id]).count('.')
-                item_num=item.count('.')
-                if int(item_num) > int(selected_bin_num):
-                # if bin_checkm[item]['Mean scaffold length'] >= bin_checkm[selected_bin]['Mean scaffold length']:
-                    best_bin_checkm2[bin_o_id]=item
-                    best_bin_checkm[bin_o_id]=bin_checkm[item]
-                elif int(item_num) == int(selected_bin_num):
-                    try:
-                        threholds_num=float(item.split('_')[-1].split('.')[0])
-                        if int(threholds_num) == 1:
-                            best_bin_checkm2[bin_o_id]=item
-                            best_bin_checkm[bin_o_id]=bin_checkm[item]
-                    except:
-                        xyzzz=0
-
-        # best_bin_cpn=bin_checkm[selected_bin]['Completeness']
-        # best_bin_ctn=bin_checkm[selected_bin]['Contamination']
-        # best_bin_ml=bin_checkm[selected_bin]['Mean scaffold length']
-        # best_bin_checkm[selected_bin]=bin_checkm[selected_bin]
-
-        #print(selected_bin, 'completeness', best_bin_cpn, 'contamination', best_bin_ctn, 'mean length', best_bin_ml
-        # print('Selected bin:', selected_bin, 'completeness', best_bin_cpn, 'contamination', best_bin_ctn)
-    best_bin_checkm3={}
-    for bin_id in best_bin_checkm2.keys():
-        best_bin_checkm3[best_bin_checkm2[bin_id]]=best_bin_checkm[bin_id]
-    return best_bin_checkm3
 
 def cleanup(max_num):
     """
-    Remove temporary OLC files generated in the CheckM branch.
+    Remove temporary OLC files generated in the post-reassembly stage.
 
     Parameters
     ----------
@@ -2094,14 +1793,14 @@ def cleanup(max_num):
     os.system('rm -rf *.perf')
     os.system('rm -rf *_split_blast_output')
     os.system('rm *_split_blast_output.txt')
-    os.system('rm -rf *_outlier')
+    os.system('rm -rf *_outliner')
     os.system('rm -rf Merged_seqs_*')
 
-def OLC_main_checkm(target_bin_folder, step, bin_comparison_folder,
-                    aligned_len_cutoff, similarity_cutoff, coverage_extension,
-                    num_threads, ram, orig_binset):
+def reassembly_OLC_main(target_bin_folder, step, bin_comparison_folder,
+                        aligned_len_cutoff, similarity_cutoff,
+                        coverage_extension, num_threads, ram, orig_binset):
     """
-    High-level driver for the S8 OLC reassembly step (CheckM branch).
+    High-level driver for the S10 post-reassembly OLC step (CheckM2 branch).
 
     Parameters
     ----------
@@ -2141,18 +1840,11 @@ def OLC_main_checkm(target_bin_folder, step, bin_comparison_folder,
     fbin_record_error=open('Bin_record_error.txt','w')
     fbin_record_error.close()
 
-    # Snapshot the current input fresh (see OLC_main): never reuse a stale
-    # same-named backup left by refinement before the 2nd de-replication, which
-    # would revive de-replicated bins when the nothing-merged branch mv's the
-    # backup into _OLC below.
-    os.system('rm -rf '+target_bin_folder+'_backup')
-    os.system('cp -r '+target_bin_folder+' '+target_bin_folder+'_backup')
-
     # OLC_status={}
     # try:
     #     for line in open(str(step)+'_OLC_checkpoint.txt','r'):
     #         OLC_status[str(line).strip()]=0
-    # except:
+    # except:s
     #     fcheckpoint=open(str(step)+'_OLC_checkpoint.txt','w')
     #     fcheckpoint.close()
     
@@ -2199,7 +1891,7 @@ def OLC_main_checkm(target_bin_folder, step, bin_comparison_folder,
         os.chdir(pwd)
 
     bestbinset_checkm_org={}
-    bestbinset_checkm=parse_checkm_1(target_bin_folder)
+    bestbinset_checkm=parse_checkm(target_bin_folder, pwd)
     bestbinset_checkm_org.update(bestbinset_checkm)
 
     if step == 'assemblies_OLC':
@@ -2245,29 +1937,20 @@ def OLC_main_checkm(target_bin_folder, step, bin_comparison_folder,
     accomplished_bins={}
     for line in open('tw_processed_bins.txt','r'):
         accomplished_bins[str(line).strip()]=1
-    delta= len(bestbinset_sim_bin) - len(accomplished_bins)
 
-    xyzzz=0
-    if delta >= 5:
-        print('Multiple threads started while using checkm with taxonomy wf mode')
+    if len(bestbinset_sim_bin) != len(accomplished_bins):
+        print('Multiple threads started in taxonomy filtration mode')
         # for i in range(1, len(bestbinset_sim_bin_d)):
-        if delta > num_threads:
-            num_projects=num_threads
-            pool=Pool(processes=num_projects)
-        else:
-            num_projects=delta
-            pool=Pool(processes=num_projects)
-
-        print('Processing bins with '+str(num_projects)+' projects')
+        pool=Pool(processes=num_threads)
         for item in bestbinset_sim_bin:
         # for item in bestbinset_sim_bin_d[i]:
             if item not in accomplished_bins.keys():
                 print('Processing '+str(item))
                 # result[item]=pool.apply_async(mul_threads, args=(item, bestbinset_sim_bin_d[i], bestbinset_checkm, step, pwd, aligned_len_cutoff, similarity_cutoff, mod_bin_folder, target_bin_folder,  coverage_extension, num_threads))
-                result[item]=pool.apply_async(mul_threads, args=(item, bestbinset_sim_bin, bestbinset_checkm, step, pwd, aligned_len_cutoff, similarity_cutoff, orig_binset, target_bin_folder, bin_comparison_folder, coverage_extension, num_threads, 'tw',))
+                result[item]=pool.apply_async(mul_threads, args=(item, bestbinset_sim_bin, bestbinset_checkm, step, pwd, aligned_len_cutoff, similarity_cutoff, orig_binset, target_bin_folder, bin_comparison_folder, coverage_extension, num_threads, 'tw'))
         pool.close()
         pool.join()
-        print('Multiple threads ended while using checkm with taxonomy wf mode')
+        print('Multiple threads ended in taxonomy filtration mode')
 
         result2={}
         for item in result:
@@ -2277,17 +1960,13 @@ def OLC_main_checkm(target_bin_folder, step, bin_comparison_folder,
             total_selected_bin.update(result2[item][0])
             total_selected_bin_checkm.update(result2[item][1])
             remove_bin.update(result2[item][2])
-        
-        for item in remove_bin.keys():
-            os.system('rm '+item)
-        xyzzz=1
 
         ### Lineage WF filtration
         fxy=open('Bin_lw.txt','w')
         incomplete_bin, del_bin={}, {}
         for line in open('Bin_checkm_mode.txt','r'):
             if 'lineage' in line:
-                ids=str(line).strip().split(' ')[0].strip()
+                ids=str(line).strip().split(' ')[0]
                 del_bin[ids]=0
                 if '_re.' in ids:
                     org_id=ids.split('_re.')[0].split('.')[0]
@@ -2300,37 +1979,6 @@ def OLC_main_checkm(target_bin_folder, step, bin_comparison_folder,
                     fxy.write(str(ids)+'\n')
         fxy.close()
 
-    elif delta >= 1:
-        for item in bestbinset_sim_bin:
-            if item not in accomplished_bins.keys():
-                print('Processing '+str(item))
-                A=mul_threads(item, bestbinset_sim_bin, bestbinset_checkm, step, pwd, aligned_len_cutoff, similarity_cutoff, orig_binset, target_bin_folder, bin_comparison_folder, coverage_extension, num_threads, 'tw')
-                total_selected_bin.update(A[0])
-                total_selected_bin_checkm.update(A[1])
-                remove_bin.update(A[2])
-
-        for item in remove_bin.keys():
-            os.system('rm '+item)
-
-        ### Lineage WF filtration
-        fxy=open('Bin_lw.txt','w')
-        incomplete_bin, del_bin={}, {}
-        for line in open('Bin_checkm_mode.txt','r'):
-            if 'lineage' in line:
-                ids=str(line).strip().split(' ')[0].strip()
-                del_bin[ids]=0
-                if '_re.' in ids:
-                    org_id=ids.split('_re.')[0].split('.')[0]
-                    incomplete_bin[ids]=0
-                    incomplete_bin[org_id+'.fa']=0
-                    incomplete_bin[org_id+'.fasta']=0
-                    fxy.write(str(ids)+'\t'+str(org_id)+'.fa'+'\t'+str(org_id)+'.fasta'+'\n')
-                else:
-                    incomplete_bin[ids]=0
-                    fxy.write(str(ids)+'\n')
-        fxy.close()
-        xyzzz=1
-        
     accomplished_bins={}
     for line in open('lw_processed_bins.txt','r'):
         accomplished_bins[str(line).strip()]=1
@@ -2346,21 +1994,19 @@ def OLC_main_checkm(target_bin_folder, step, bin_comparison_folder,
                 del incomplete_bin[bins_id]
 
         if len(incomplete_bin) != 0:
-            print('Multiple threads started while using checkm with lineage wf mode')
+            print('Multiple threads started in lineage filtration mode')
             cleanup(3)
-            project_num=int(ram/32)+1
+            project_num=int(ram/18)+1
             p_per_project=int(num_threads/project_num)
-            if len(incomplete_bin) < project_num:
-                project_num=len(incomplete_bin)
             pool=Pool(processes=project_num)
             for item in bestbinset_sim_bin:
                 if item in incomplete_bin.keys():
                     print('Processing '+str(item)+' lw')
                     #mul_threads(item, bestbinset_sim_bin, bestbinset_checkm, step, pwd, aligned_len_cutoff, similarity_cutoff, orig_binset, target_bin_folder, coverage_extension, p_per_project, 'lw')
-                    result[item]=pool.apply_async(mul_threads, args=(item, bestbinset_sim_bin, bestbinset_checkm, step, pwd, aligned_len_cutoff, similarity_cutoff, orig_binset, target_bin_folder, bin_comparison_folder, coverage_extension, p_per_project, 'lw',))
+                    result[item]=pool.apply_async(mul_threads, args=(item, bestbinset_sim_bin, bestbinset_checkm, step, pwd, aligned_len_cutoff, similarity_cutoff, orig_binset, target_bin_folder, bin_comparison_folder, coverage_extension, p_per_project, 'lw'))
             pool.close()
             pool.join()
-            print('Multiple threads ended while using checkm with lineage wf mode')
+            print('Multiple threads ended in lineage filtration mode')
 
             result2={}
             for item in result:
@@ -2370,266 +2016,119 @@ def OLC_main_checkm(target_bin_folder, step, bin_comparison_folder,
                 total_selected_bin.update(result2[item][0])
                 total_selected_bin_checkm.update(result2[item][1])
                 remove_bin.update(result2[item][2])
-            xyzzz=1
 
     for item in remove_bin.keys():
         os.system('rm '+item)
 
-    if xyzzz == 1:
-        OLC_bins={}
-        os.chdir(pwd+'/'+target_bin_folder+'_OLC/')
-        for root, dirs, files in os.walk(pwd+'/'+target_bin_folder+'_OLC/'):
-            for file in files:
-                hz=str(file).split('.')[-1]
-                if 'fa' in  hz:
-                    n, x=0, 0
-                    for line in open(file,'r'):
-                        n+=1
-                        if n == 2:
-                            x=1
-                            break
-                    
-                    if x == 1:
-                        qz=str(file).split('_genomes.')[0]
-                        bin_num=str(file).split('_genomes.')[1].split('.')[0]
-                        target_bin_rename=qz+'_genomes.'+str(bin_num)+'.fa'
-                        target_bin_rename2=qz+'_genomes.'+str(bin_num)+'.fasta'
-                        OLC_bins[target_bin_rename]=0
-                        OLC_bins[target_bin_rename2]=0
+    for root, dirs, files in os.walk(pwd+'/'+target_bin_folder+'_temp'):
+        for file in files:
+            if '.fa' in  file or '.fna' in file:
+                os.system('mv '+pwd+'/'+target_bin_folder+'_temp/'+file+' '+pwd+'/'+target_bin_folder)
 
-        for root, dirs, files in os.walk(pwd+'/'+target_bin_folder+'_temp'):
-            for file in files:
-                if '.fa' in  file:
-                    os.system('mv '+pwd+'/'+target_bin_folder+'_temp/'+file+' '+pwd+'/'+target_bin_folder)
+    os.chdir(pwd)
+    backend = _require_backend()
+    os.system('rm -rf '+target_bin_folder+'_OLC_checkm')
+    os.system(backend.build_cmd(num_threads, target_bin_folder+'_OLC', target_bin_folder+'_OLC_checkm', ext='fa'))
+    bin_checkm=parse_checkm(target_bin_folder+'_OLC_checkm', pwd)
+    bin_checkm.update(bestbinset_checkm_org)
 
-        exiz_bin={}
-        os.chdir(pwd+'/'+target_bin_folder)
-        for root, dirs, files in os.walk(pwd+'/'+target_bin_folder):
-            for file in files:
-                if '.fa' in  file and '_genomes.' in file:
-                    num=str(file).split('_genomes.')[1].split('.')[0]
-                    qz=str(file).split('_genomes.')[0]
-                    nn=qz+'_genomes.'+str(num)
-                    exiz_bin[nn]=0
+    os.chdir(pwd+'/'+target_bin_folder)
+    print('Moving bins in original folder to the OLC folder')
+    for root, dirs, files in os.walk(pwd+'/'+target_bin_folder):
+        for file in files:
+            hz=str(file).split('.')[-1]
+            if 'fa' in  hz or 'fna' in hz:
+                os.system('cp '+file+' '+pwd+'/'+target_bin_folder+'_OLC/')
+                # if file not in OLC_bins.keys():
+                #     name_lis=str(file).split('.')
+                #     name_lis.remove(name_lis[-1])
+                #     target_bin_checkm_name='.'.join(name_lis)
+                #     target_bin_rename=target_bin_checkm_name+'.fa'
+                #     print('Moved', file, 'to the selected bins pool')
+                #     os.system('cp '+file+' '+pwd+'/'+target_bin_folder+'_OLC/'+target_bin_rename)
+                    # total_selected_bin_checkm[target_bin_checkm_name]=bestbinset_checkm[target_bin_checkm_name]
 
-        os.chdir(pwd+'/'+target_bin_folder+'_OLC')
-        xx=0
-        for root, dirs, files in os.walk(pwd+'/'+target_bin_folder+'_OLC'):
-            for file in files:
-                if '.fa' in  file and '_genomes.' in file:
-                    hz=str(file).split('_genomes.')[1]
-                    qz=str(file).split('_genomes.')[0]
-                    num=str(file).split('_genomes.')[1].split('.')[0]
-                    nn=qz+'_genomes.'+str(num)
-                    if '_' not in hz:
-                        if nn not in exiz_bin.keys():
-                            os.system('mv '+pwd+'/'+target_bin_folder+'_OLC/'+file+' '+pwd+'/'+target_bin_folder)
-                        else:
-                            os.system('rm '+file)
-                    else:
-                        xx+=1
+    best_bin_checkm=bin_comparison2(bin_checkm)
+    # Copy backend's results file (whatever its filename) into the OLC folder for record.
+    src_results = backend.results_path(pwd+'/'+target_bin_folder+'_OLC_checkm')
+    if os.path.exists(src_results):
+        os.system('cp '+src_results+' '+pwd+'/'+target_bin_folder+'_OLC/OLC_'+backend.results_filename+'_o')
 
-        # print(str(len(total_selected_bin_checkm)), 'recored in quality tsv file')
-        os.chdir(pwd)
-        if xx >= 1:
-            os.system('checkm lineage_wf -t '+str(num_threads)+' -x fa '+target_bin_folder+'_OLC '+target_bin_folder+'_OLC_checkm')
+    os.chdir(pwd+'/'+target_bin_folder+'_OLC')
+    fxyz=open('OLC_quality_report.tsv','w')
+    fxyz.write('Bin_ID'+'\t'+'Genome_size'+'\t'+'Completeness'+'\t'+'Contamination'+'\t'+backend.contig_size_key+'\n')
+    for bin_id in best_bin_checkm.keys():
+        m = best_bin_checkm[bin_id]
+        cs = m.get('contig_size', m.get('N50', 0))
+        fxyz.write(str(bin_id)+'\t'+str(m.get('Genome size', 0))+'\t'+str(m.get('Completeness', 0))+'\t'+str(m.get('Contamination', 0))+'\t'+str(cs)+'\n')
+    fxyz.close()
 
-            bin_checkm, orgi_bin, selected_bins_checkm ={}, {}, {}
-            for line in open(pwd+'/'+target_bin_folder+'_OLC_checkm/storage/bin_stats_ext.tsv','r'):
-                binID=str(line).strip().split('{\'')[0].strip()             
-                binID_num=binID.split('_genomes.')[1].split('.')[0]
-                orig_bin_id=binID.split('_genomes.')[0]+'_genomes.'+str(binID_num)
-                if orig_bin_id not in orgi_bin.keys():
-                    orgi_bin[orig_bin_id]=binID
-                    Contamination=float(str(line).strip().split('Contamination\': ')[1].split('}')[0].split(',')[0])
-                    Completeness=float(str(line).strip().split('Completeness\': ')[1].split('}')[0].split(',')[0])
-                    bin_checkm[orig_bin_id]=Completeness-5*Contamination
+    for root, dirs, files in os.walk(pwd+'/'+target_bin_folder+'_OLC'):
+        for file in files:
+            hz=str(file).split('.')[-1]
+            file_name_list=str(file).split('.')
+            file_name_list.remove(file_name_list[-1])
+            file_name='.'.join(file_name_list)
+            if 'fa' in hz or 'fna' in hz: 
+                if file_name not in best_bin_checkm.keys():
+                    os.system('rm '+str(file))
 
-                    selected_bins_checkm[binID]={}
-                    selected_bins_checkm[binID]['Contamination']=float(str(line).strip().split('Contamination\': ')[1].split('}')[0].split(',')[0])
-                    selected_bins_checkm[binID]['marker lineage']=str(line).strip().split('marker lineage\': \'')[1].split('}')[0].split('\',')[0]
-                    selected_bins_checkm[binID]['Completeness']=float(str(line).strip().split('Completeness\': ')[1].split('}')[0].split(',')[0])
-                    selected_bins_checkm[binID]['Genome size']=float(str(line).strip().split('Genome size\': ')[1].split('}')[0].split(',')[0].replace('\'',''))
-                else:
-                    Contamination=float(str(line).strip().split('Contamination\': ')[1].split('}')[0].split(',')[0])
-                    Completeness=float(str(line).strip().split('Completeness\': ')[1].split('}')[0].split(',')[0])
-                    qc=Completeness-5*Contamination
-                    if qc > bin_checkm[orig_bin_id]:
-                        selected_bins_checkm[binID]={}
-                        selected_bins_checkm[binID]['Contamination']=Contamination
-                        selected_bins_checkm[binID]['marker lineage']=str(line).strip().split('marker lineage\': \'')[1].split('}')[0].split('\',')[0]
-                        selected_bins_checkm[binID]['Completeness']=Completeness
-                        selected_bins_checkm[binID]['Genome size']=float(str(line).strip().split('Genome size\': ')[1].split('}')[0].split(',')[0].replace('\'',''))
-                        binid2=orgi_bin[orig_bin_id]
-                        del selected_bins_checkm[binid2]
-                        os.system('rm '+pwd+'/'+target_bin_folder+'_OLC/'+str(binid2)+'.fa')
-                        orgi_bin[orig_bin_id]=binID
-                        bin_checkm[orig_bin_id]=qc
-                    elif qc == bin_checkm[orig_bin_id]:
-                        binID_o=orgi_bin[orig_bin_id]
-                        iteration_num=int(str(binID_o).split('_')[0])
-                        iteration2=int(str(binID).split('_')[0])
-                        if iteration2 > iteration_num:
-                            selected_bins_checkm[binID]={}
-                            selected_bins_checkm[binID]['Contamination']=Contamination
-                            selected_bins_checkm[binID]['marker lineage']=str(line).strip().split('marker lineage\': \'')[1].split('}')[0].split('\',')[0]
-                            selected_bins_checkm[binID]['Completeness']=Completeness
-                            selected_bins_checkm[binID]['Genome size']=float(str(line).strip().split('Genome size\': ')[1].split('}')[0].split(',')[0].replace('\'',''))
-                            binid2=orgi_bin[orig_bin_id]
-                            del selected_bins_checkm[binid2]
-                            os.system('rm '+pwd+'/'+target_bin_folder+'_OLC/'+str(binid2)+'.fa')
-                            orgi_bin[orig_bin_id]=binID
-                            bin_checkm[orig_bin_id]=qc
-                        else:
-                            os.system('rm '+pwd+'/'+target_bin_folder+'_OLC/'+str(binID)+'.fa')
-
-            os.chdir(pwd+'/'+target_bin_folder)
-            for root, dirs, files in os.walk(pwd+'/'+target_bin_folder):
-                for file in files:
-                    if 'bin_stats_ext.tsv' in file:
-                        for line in open(file,'r'):
-                            binID=str(line).strip().split('{\'')[0].strip()
-                            if binID in bin_checkm.keys():
-                                Contamination=float(str(line).strip().split('Contamination\': ')[1].split('}')[0].split(',')[0])
-                                Completeness=float(str(line).strip().split('Completeness\': ')[1].split('}')[0].split(',')[0])
-                                qc=Completeness-5*Contamination
-                                if qc > bin_checkm[binID]:
-                                    selected_bins_checkm[binID]={}
-                                    selected_bins_checkm[binID]['Contamination']=float(str(line).strip().split('Contamination\': ')[1].split('}')[0].split(',')[0])
-                                    selected_bins_checkm[binID]['marker lineage']=str(line).strip().split('marker lineage\': \'')[1].split('}')[0].split('\',')[0]
-                                    selected_bins_checkm[binID]['Completeness']=float(str(line).strip().split('Completeness\': ')[1].split('}')[0].split(',')[0])
-                                    selected_bins_checkm[binID]['Genome size']=float(str(line).strip().split('Genome size\': ')[1].split('}')[0].split(',')[0].replace('\'',''))
-                                    os.system('cp '+binID+'.fa '+pwd+'/'+target_bin_folder+'_OLC/')
-                                    os.system('cp '+binID+'.fasta '+pwd+'/'+target_bin_folder+'_OLC/')
-                                    binid2=str(orgi_bin[binID])
-                                    os.system('rm '+pwd+'/'+target_bin_folder+'_OLC/'+str(binid2)+'.fa')
-                                    del selected_bins_checkm[binid2]
-                                    print('Moved', binID, 'to the selected bins pool')
-                            else:
-                                selected_bins_checkm[binID]={}
-                                selected_bins_checkm[binID]['Contamination']=float(str(line).strip().split('Contamination\': ')[1].split('}')[0].split(',')[0])
-                                selected_bins_checkm[binID]['marker lineage']=str(line).strip().split('marker lineage\': \'')[1].split('}')[0].split('\',')[0]
-                                selected_bins_checkm[binID]['Completeness']=float(str(line).strip().split('Completeness\': ')[1].split('}')[0].split(',')[0])
-                                selected_bins_checkm[binID]['Genome size']=float(str(line).strip().split('Genome size\': ')[1].split('}')[0].split(',')[0].replace('\'',''))
-                                os.system('cp '+binID+'.fa '+pwd+'/'+target_bin_folder+'_OLC/')
-                                os.system('cp '+binID+'.fasta '+pwd+'/'+target_bin_folder+'_OLC/')
-                                print('Moved', binID, 'to the selected bins pool')
-
-            os.chdir(pwd+'/'+target_bin_folder+'_OLC')
-            f=open('OLC_bin_stats_ext.tsv','w')
-            for binID in selected_bins_checkm.keys():
-                f.write(str(binID)+'\t'+str(selected_bins_checkm[binID])+'\n')
-            f.close()
-
-        # os.chdir(pwd+'/'+target_bin_folder)
-        # for root, dirs, files in os.walk(pwd+'/'+target_bin_folder):
-        #     for file in files:
-        #         hz=str(file).split('.')[-1]
-        #         if 'fa' in  hz:
-        #             if file not in OLC_bins.keys():
-        #                 name_lis=str(file).split('.')
-        #                 name_lis.remove(name_lis[-1])
-        #                 target_bin_checkm_name='.'.join(name_lis)
-        #                 target_bin_rename=target_bin_checkm_name+'.fa'###
-        #                 print('Moved', file, 'to the selected bins pool')
-        #                 os.system('cp '+file+' '+pwd+'/'+target_bin_folder+'_OLC/'+target_bin_rename)
-        #                 total_selected_bin_checkm[target_bin_checkm_name]=bestbinset_checkm[target_bin_checkm_name]
-
-        ##########
-        else:
-            os.chdir(pwd)
-            for root, dirs, files in os.walk(pwd+'/'+target_bin_folder+'_temp'):
-                for file in files:
-                    if '.fa' in  file:
-                        os.system('mv '+pwd+'/'+target_bin_folder+'_temp/'+file+' '+pwd+'/'+target_bin_folder)
-
-            os.system('rm -rf '+target_bin_folder+'_OLC')
-            os.system('mv '+target_bin_folder+'_backup '+target_bin_folder+'_OLC') ### BASALT_main copied the backup folder
-        ##########
-        
-        os.chdir(pwd+'/'+target_bin_folder+'_OLC')
-        max_num=0
-        for root, dirs, files in os.walk(pwd+'/'+target_bin_folder+'_OLC'):
-            for file in files:            
-                hz=str(file).split('.')[-1]
-                if 'fa' in hz:
-                    iteration_num=int(str(file).split('_')[0])
-                    if iteration_num > max_num:
-                        max_num=iteration_num
-        
-        os.chdir(pwd+'/'+target_bin_folder)
-        assemblies_name={}
-        for root, dirs, files in os.walk(pwd+'/'+target_bin_folder+'_OLC'):
-            for file in files:            
-                hz=str(file).split('.')[-1]
-                if 'fa' in hz:
-                    name_list=str(file).split('.')
-                    name_list.remove(name_list[-1])
-                    name_list.remove(name_list[-1])
-                    name_join='.'.join(name_list)
-                    assemblies_name[name_join]=0
-        os.chdir(pwd)
-    else:
-        os.chdir(pwd)
-        for root, dirs, files in os.walk(pwd+'/'+target_bin_folder+'_temp'):
-            for file in files:
-                if '.fa' in  file:
-                    os.system('mv '+pwd+'/'+target_bin_folder+'_temp/'+file+' '+pwd+'/'+target_bin_folder)
-
-        os.system('rm -rf '+target_bin_folder+'_OLC')
-        os.system('mv '+target_bin_folder+'_backup '+target_bin_folder+'_OLC') ### BASALT_main copied the backup folder
-
-    # Drop the entry-time snapshot if a merge path left it unconsumed (the mv
-    # restores above consume it; the merged-bins path does not), mirroring the
-    # end-cleanup in OLC_main so the fresh backup never leaks to disk.
-    os.system('rm -rf '+target_bin_folder+'_backup')
-
-    os.system('mkdir '+target_bin_folder+'_OLC_file')
-    os.system('mv Remained_unused_blastoutput.txt Bin_checkm_mode.txt Elongation* Deleted_tw_bins_for_further_lw.txt OLC_fault_bins.txt lw_processed_bins.txt tw_processed_bins.txt '+target_bin_folder+'_OLC_file')
-
-    os.system('rm *_db.txt')
-    os.system('rm *.nsq')
-    os.system('rm *.nin')
-    os.system('rm *.nsi')
-    os.system('rm *.nsd')
-    os.system('rm *.nog')
-    os.system('rm *.nhr')
-    os.system('rm *.nhi')
-    os.system('rm *.nhd')
-    os.system('rm *.nbd')
-    os.system('rm *.ndb')
-    os.system('rm *.nto')
-    os.system('rm *.nos')
-    os.system('rm *.ntf')
-    os.system('rm *.njs')
-    os.system('rm *.not')
-    try:
-        for i in range(1, max_num+1):
-            os.system('rm Merged_'+str(i)+'*')
-            os.system('rm Merged_seqs_'+str(i)+'*')
-            os.system('rm *'+str(i)+'_merged_seq.txt')
-            os.system('rm Filtrated_blast_'+str(i)+'_*')
-            os.system('rm blast_'+str(i)+'_*')
-            thresholds=[1, 1.5, 3]
-            for item in thresholds:
-                os.system('rm '+str(item)+'_'+str(i)+'_*')
-        os.system('rm Merged_*')
-    except:
-        xyz=0
+    max_num=0
+    for root, dirs, files in os.walk(pwd+'/'+target_bin_folder+'_OLC'):
+        for file in files:            
+            hz=str(file).split('.')[-1]
+            if '_re.' in file:
+                iteration_num=int(str(file).split('_re.')[-2].split('.')[-1])
+                if iteration_num > max_num:
+                    max_num=iteration_num
     
+    os.chdir(pwd+'/'+target_bin_folder)
+    assemblies_name={}
+    for root, dirs, files in os.walk(pwd+'/'+target_bin_folder+'_OLC'):
+        for file in files:            
+            hz=str(file).split('.')[-1]
+            if 'fa' in hz or 'fna' in hz:
+                name_list=str(file).split('.')
+                name_list.remove(name_list[-1])
+                name_list.remove(name_list[-1])
+                name_join='.'.join(name_list)
+                assemblies_name[name_join]=0
+    os.chdir(pwd)
+
+    for item in assemblies_name.keys():
+        os.system('rm '+str(item)+'.*')
+
+    cleanup(max_num)
     try:
-        for item in assemblies_name.keys():
-            os.system('rm '+str(item)+'.*')
+        os.mkdir(target_bin_folder+'_OLC_file')
     except:
         xyz=0
-
-    os.system('rm -rf *.fa_checkm')
-    os.system('rm -rf *.fa_merged')
-    os.system('rm -rf *.kmer.txt')
-    os.system('rm -rf *.perf')
-    os.system('rm -rf *_split_blast_output')
-    os.system('rm *_split_blast_output.txt *_elongation_error.txt')
-    os.system('rm -rf *_outlier')
+    os.system('mv Remained_unused_blastoutput.txt Bin_checkm_mode.txt Elongation* Deleted_tw_bins_for_further_lw.txt OLC_fault_bins.txt lw_processed_bins.txt tw_processed_bins.txt '+target_bin_folder+'_OLC_file')
 
     print('Done!')
 
+if __name__ == '__main__': 
+    ### 1st OLC folder
+    # target_bin_folder='BestBinset_outlier_refined_filtrated_retrieved'
+    # bin_comparison_or_reassembly_binset_folder='BestBinset_comparison_files'
+    # step='assemblies_OLC'
+    # orig_binset=''   ### in assemblies_OLC, you could just let it to be blank
+    # aligned_len_cutoff=500
+    # similarity_cutoff=99
+    # coverage_extension=95
+
+    ### re-assembly folder
+    # target_bin_folder='BestBinset_outlier_refined_filtrated_retrieved_OLC_re-assembly'
+    target_bin_folder='1_Opera_unpolished_cat_contigs.fasta_BestBinsSet_outlier_refined_filtrated_retrieved_MAGs_polished_re-assembly_bs2'
+    step='OLC_after_reassembly' ### 'assemblies_OLC' or 'OLC_after_reassembly' ; 'assemblies_OLC' means 1st OLC; 'OLC_after_reassembly' means OLC after reassembly
+    bin_comparison_or_reassembly_binset_folder='1_Opera_unpolished_cat_contigs.fasta_BestBinsSet_outlier_refined_filtrated_retrieved_MAGs_polished_re-assembly_binset_bs2'
+    orig_binset='1_Opera_unpolished_cat_contigs.fasta_BestBinsSet_outlier_refined_filtrated_retrieved_MAGs_polished_re-assembly_bs2_mod'
+    # bin_comparison_or_reassembly_binset_folder='BestBinset_outlier_refined_filtrated_retrieved_OLC_re-assembly_binset'
+    # orig_binset='BestBinset_outlier_refined_filtrated_retrieved_OLC_mod'
+    aligned_len_cutoff=500
+    similarity_cutoff=98
+    coverage_extension=90
+
+    num_threads=40
+    ram=250
+    reassembly_OLC_main(target_bin_folder, step, bin_comparison_or_reassembly_binset_folder, aligned_len_cutoff, similarity_cutoff, coverage_extension, num_threads, ram, orig_binset)

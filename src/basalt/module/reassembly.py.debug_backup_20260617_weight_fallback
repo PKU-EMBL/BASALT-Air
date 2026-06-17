@@ -79,18 +79,12 @@ def BASALT_main_re_assembly(assembly_list, datasets, num_threads, lr_list, hifi_
 
     #### Check existence of models
     user_dir = os.path.expanduser('~')
-    candidate_model_dirs = [
-        os.environ.get("BASALT_WEIGHT"),
-        f"{user_dir}/db/BASALT",
-        f"{user_dir}/.cache/BASALT",
-    ]
-    local_dir = next((d for d in candidate_model_dirs if d and os.path.isdir(d)), None)
-    if local_dir is None:
-        model_list = []
-    else:
-        os.chdir(local_dir)
-        model_list=glob(r'*_ensemble.csv')
-        os.chdir(pwd)
+    # local_dir = f"{user_dir}/.cache/BASALT"
+    BASALT_WEIGHT = os.environ.get("BASALT_WEIGHT")
+    local_dir = BASALT_WEIGHT
+    os.chdir(local_dir)
+    model_list=glob(r'*_ensemble.csv')
+    os.chdir(pwd)
     # print(model_list)
     if len(model_list) == 5:
         x=0

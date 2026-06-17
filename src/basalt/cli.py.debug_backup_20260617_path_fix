@@ -26,20 +26,6 @@ except ImportError:
     pass
 
 
-def _prepend_runtime_bin_to_path():
-    paths = [os.path.dirname(sys.executable)]
-    try:
-        paths.append(os.path.dirname(os.path.realpath(sys.argv[0])))
-    except Exception:
-        pass
-    current = os.environ.get('PATH', '')
-    parts = current.split(os.pathsep) if current else []
-    for item in reversed(paths):
-        if item and os.path.isdir(item) and item not in parts:
-            parts.insert(0, item)
-    os.environ['PATH'] = os.pathsep.join(parts)
-
-
 # ---------------------------------------------------------------------------
 # Argument parsing
 # ---------------------------------------------------------------------------
@@ -602,7 +588,6 @@ def _dispatch():
 
 def main():
     """Console-script entry point. Parses ``sys.argv`` and dispatches."""
-    _prepend_runtime_bin_to_path()
     _print_banner()
     global args
     global assemblies, sr_datasets, long_reads_list, hifi_list, QC_software

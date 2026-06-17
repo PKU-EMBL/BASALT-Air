@@ -17,7 +17,6 @@ try:
     generic_dna_t=1
 except ImportError:
     generic_dna_t=0
-import ast
 import os, copy, glob
 from sklearn.decomposition import PCA
 import numpy as np
@@ -1309,21 +1308,6 @@ def merge(target_bin_folder, target_bin, eliminated_bin_list, target_bin_checkm,
         print('-------------------')
     return best_bin, item
 
-
-def _selected_bin_contamination(line):
-    fields = str(line).strip().split('\t')
-    if len(fields) < 2:
-        raise ValueError('Selected_bins line has too few tab-delimited fields: ' + str(line).strip())
-    try:
-        bin1_factors = ast.literal_eval(fields[-2])
-        bin2_factors = ast.literal_eval(fields[-1])
-    except (SyntaxError, ValueError) as exc:
-        raise ValueError('Cannot parse Selected_bins factor columns: ' + str(line).strip()) from exc
-    try:
-        return float(bin1_factors['Contamination']), float(bin2_factors['Contamination'])
-    except (KeyError, TypeError, ValueError) as exc:
-        raise ValueError('Cannot read Contamination from Selected_bins factor columns: ' + str(line).strip()) from exc
-
 def finding_similar_bins(target_bin_folder, bin_comparison_folder):
     pwd=os.getcwd()
     print('Forming similar bins file')
@@ -1347,7 +1331,8 @@ def finding_similar_bins(target_bin_folder, bin_comparison_folder):
                         x=0
                         bin1=str(line).strip().split('\t')[1].split('---')[0]
                         bin2=str(line).strip().split('\t')[1].split('---')[1]
-                        bin1_ctn, bin2_ctn = _selected_bin_contamination(line)
+                        bin1_ctn=float(eval(str(line).strip().split('Contamination')[1].split(':')[1].split('}')[0].strip()))
+                        bin2_ctn=float(eval(str(line).strip().split('Contamination')[2].split(':')[1].split('}')[0].strip()))
                         if len(bestbinset_sim_bin) != 0:
                             for item in bestbinset_sim_bin.keys():
                                 if bin1 in bestbinset_sim_bin[item].keys() and bin2 not in bestbinset_sim_bin[item].keys():
@@ -1381,7 +1366,8 @@ def finding_similar_bins(target_bin_folder, bin_comparison_folder):
                         x=0
                         bin1=str(line).strip().split('\t')[1].split('---')[0].strip()
                         bin2=str(line).strip().split('\t')[1].split('---')[1].strip()
-                        bin1_ctn, bin2_ctn = _selected_bin_contamination(line)
+                        bin1_ctn=float(eval(str(line).strip().split('Contamination')[1].split(':')[1].split('}')[0].strip()))
+                        bin2_ctn=float(eval(str(line).strip().split('Contamination')[2].split(':')[1].split('}')[0].strip()))
                         if len(bestbinset_sim_bin) != 0:
                             for item in bestbinset_sim_bin.keys():
                                 if bin1 in bestbinset_sim_bin[item].keys() and bin2 not in bestbinset_sim_bin[item].keys():
