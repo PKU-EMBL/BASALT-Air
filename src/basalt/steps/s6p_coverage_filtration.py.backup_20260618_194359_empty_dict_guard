@@ -328,25 +328,14 @@ def contig_filtration(bin_id, parameter, m, coff, level_n, pwd):
         for line in open('Bin_connecting_contigs.txt', 'r'):
             n+=1
             if n >= 2:
-                fields = str(line).strip().split('\t')
-                bins = fields[0]
+                bins=str(line).strip().split('\t')[0]
                 if bins == bin_id:
-                    bin_connecting_contigs_total[bins] = {}
-                    if len(fields) < 2:
-                        continue
-                    matrix_text = fields[1].strip()
-                    if matrix_text in ('', '{}'):
-                        continue
-                    dict_key_list = matrix_text.replace('{','').replace('}','').split(',')
+                    bin_connecting_contigs_total[bins]={}
+                    dict_key_list=str(line).strip().replace('{','').replace('}','').split('\t')[1].split(',')
                     for item in dict_key_list:
-                        try:
-                            contig_id = item.split('\'')[1].strip()
-                            level = int(item.split(':')[1].strip())
-                        except (IndexError, ValueError):
-                            continue
-                        bin_connecting_contigs_total[bins][contig_id] = level
-                        connecting_contigs[contig_id] = 0
-    except FileNotFoundError:
+                        bin_connecting_contigs_total[bins][item.split('\'')[1]]=int(item.split(':')[1].strip())
+                        connecting_contigs[item.split('\'')[1]]=0
+    except:
         for line in open('Combat_extract_contigs_level2.txt','r'):
             level_num=int(str(line).strip().split('\t')[0].strip())
             if level_num == int(level_n):
@@ -362,9 +351,6 @@ def contig_filtration(bin_id, parameter, m, coff, level_n, pwd):
                         connecting_contigs[contig.strip()]=0
     # else:
     #     print('No file found. Error!')
-
-    if bin_id not in bin_connecting_contigs_total:
-        bin_connecting_contigs_total[bin_id] = {}
 
     bin_extract_contig, selected_1st, elemimated_contig ={}, {}, {}
     if parameter == 'coverage_filtration':
