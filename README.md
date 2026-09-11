@@ -111,6 +111,10 @@ or the pixi task:
 pixi run download-weights
 ```
 
+The built-in downloader uses a bounded network timeout, writes downloads
+atomically, and rejects archive members that would escape the destination
+directory.
+
 Download the CheckM2 database with:
 
 ```bash
@@ -132,6 +136,15 @@ pixi run version
 pixi run check-deps
 pixi run sanity
 ```
+
+The repository regression checks can be run from a development installation:
+
+```bash
+pip install -e '.[dev]'
+pytest -q
+```
+
+Every push and pull request also runs these checks through GitHub Actions.
 
 ## Quick Start
 
@@ -185,7 +198,7 @@ basalt \
     --outdir /results/output
 ```
 
-For multiple absolute-path paired-end datasets, use `" "` and `;` between read pairs:
+For multiple absolute-path paired-end datasets, use `;` between read pairs:
 
 ```bash
 basalt \
