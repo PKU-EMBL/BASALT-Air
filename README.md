@@ -87,10 +87,9 @@ pixi install
 BASALT-Air model weights are available from:
 
 - Hugging Face: <https://huggingface.co/PKU-EMBL/BASALT_WEIGHT>
-- Google Drive: <https://drive.google.com/drive/folders/1d0e_2FpYRBAZLwKXl8fA-yDK4b5PBA_E>
 - Baidu Netdisk: <https://pan.baidu.com/s/1ouKqabxHYr1GmvpquQCzqw?pwd=embl> (提取码: `embl`)
 
-CheckM2 database and demo data are available from the same Google Drive and Baidu Netdisk links.
+CheckM2 database and demo data are available from the Baidu Netdisk link.
 
 Expected local paths:
 
@@ -238,7 +237,6 @@ installing the `dev` extras (`pip install -e '.[dev]'`).
 
 Demo data are available from:
 
-- Google Drive: <https://drive.google.com/drive/folders/1d0e_2FpYRBAZLwKXl8fA-yDK4b5PBA_E>
 - Baidu Netdisk: <https://pan.baidu.com/s/1ouKqabxHYr1GmvpquQCzqw?pwd=embl> (提取码: `embl`)
 
 Example:
