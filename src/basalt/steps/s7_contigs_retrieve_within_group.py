@@ -970,8 +970,8 @@ def _bin_comparison_checkm2(original_bin_folder, new_bins_checkm, new_bin_folder
             elif refined_delta == org_delta:
                 if refined_bin_cpn < 85:
                     if '_RT-D' in sel_bin and '_RT-D' in refined_bin_id:
-                        num1=int(eval(sel_bin.split('_RT-D')[1]))
-                        num2=int(eval(refined_bin_id.split('_RT-D')[1]))
+                        num1=int(sel_bin.split('_RT-D')[1])
+                        num2=int(refined_bin_id.split('_RT-D')[1])
                         if num1 > num2:
                             del bestbin[org_bin_id][sel_bin]
                             replace_bin[sel_bin]=''
@@ -2254,7 +2254,7 @@ def _bin_comparison_checkm(original_bin_folder, new_bins_checkm, new_bin_folder,
                     taxon=str(line).strip().split('lineage')[1].split('\'')[2].strip()
                     completeness=float(str(line).strip().split('Completeness\':')[1].split(',')[0].strip())
                     contamination=float(str(line).strip().split('Contamination\':')[1].split(',')[0].split('}')[0].strip())
-                    genome_size=float(eval(str(line).strip().split('Genome size\':')[1].split(',')[0].strip()))
+                    genome_size=float(str(line).strip().split('Genome size\':')[1].split(',')[0].strip())
                     bin_checkm[str(binID)]={}
                     # bin_checkm[str(binID)]['Connections']=int(connections)
                     bin_checkm[str(binID)]['marker lineage']=str(taxon)
@@ -2682,8 +2682,8 @@ def _bin_comparison_checkm(original_bin_folder, new_bins_checkm, new_bin_folder,
             # else:
                 if refined_bin_cpn < 85:
                     if '_RT-D' in sel_bin and '_RT-D' in refined_bin_id:
-                        num1=int(eval(sel_bin.split('_RT-D')[1]))
-                        num2=int(eval(refined_bin_id.split('_RT-D')[1]))
+                        num1=int(sel_bin.split('_RT-D')[1])
+                        num2=int(refined_bin_id.split('_RT-D')[1])
                         if num1 > num2:
                             del bestbin[org_bin_id][sel_bin]
                             replace_bin[sel_bin]=''

@@ -8,6 +8,11 @@ to ensure that the required deep learning models are present locally.
 """
 
 import os
+import stat
+import tempfile
+import zipfile
+from pathlib import Path
+
 import requests
 from tqdm import tqdm
 
@@ -29,7 +34,7 @@ def download_model(local_dir=None):
 
     # Public URL hosting BASALT model weights
     url = "https://figshare.com/ndownloader/files/41093033"
-    local_path = f"{local_dir}/BASALT.zip"
+    local_path = os.path.join(local_dir, "BASALT.zip")
 
     if os.path.exists(local_path):
         print(f"File already exists at {local_path}.")
@@ -38,20 +43,51 @@ def download_model(local_dir=None):
     os.makedirs(local_dir, exist_ok=True)
     print(f"File will be saved in {local_path}.")
 
-    response = requests.get(url, stream=True)
-    response.raise_for_status()
-    total_size = int(response.headers.get('content-length', 0))
-    block_size = 1024
-    progress_bar = tqdm(total=total_size, unit='iB', unit_scale=True)
-
-    with open(local_path, 'wb') as f:
-        for data in response.iter_content(block_size):
-            progress_bar.update(len(data))
-            f.write(data)
-
-    progress_bar.close()
+    # Download to a temporary file in the destination directory so an
+    # interrupted transfer cannot leave a corrupt archive that looks complete.
+    fd, temp_path = tempfile.mkstemp(prefix='.BASALT.', suffix='.part', dir=local_dir)
+    os.close(fd)
+    try:
+        response = requests.get(url, stream=True, timeout=(10, 120))
+        response.raise_for_status()
+        total_size = int(response.headers.get('content-length', 0))
+        block_size = 1024 * 1024
+        with tqdm(total=total_size, unit='iB', unit_scale=True) as progress_bar:
+            with open(temp_path, 'wb') as f:
+                for data in response.iter_content(block_size):
+                    if data:
+                        progress_bar.update(len(data))
+                        f.write(data)
+        os.replace(temp_path, local_path)
+    except Exception:
+        try:
+            os.unlink(temp_path)
+        except OSError:
+            pass
+        raise
     print("File downloaded successfully.")
     return local_path
+
+
+def _safe_extract(zip_path, destination):
+    """Extract a model archive without allowing path traversal."""
+    destination = Path(destination).resolve()
+    destination.mkdir(parents=True, exist_ok=True)
+    with zipfile.ZipFile(zip_path) as archive:
+        for member in archive.infolist():
+            mode = (member.external_attr >> 16) & 0xFFFF
+            if stat.S_ISLNK(mode):
+                raise ValueError(
+                    'refusing to extract symbolic link from model archive: {}'
+                    .format(member.filename)
+                )
+            target = (destination / member.filename).resolve()
+            if target != destination and destination not in target.parents:
+                raise ValueError(
+                    'refusing to extract archive member outside destination: {}'
+                    .format(member.filename)
+                )
+        archive.extractall(destination)
 
 
 def main():
@@ -66,12 +102,8 @@ def main():
             "Please configure a directory for BASALT model weights."
         )
 
-    exit_code = os.system(f"unzip -o {zip_path} -d {destination_folder}")
-
-    if exit_code == 0:
-        print("Successfully unzipped BASALT model archive.")
-    else:
-        print("Unzip failed: please check your unzip configuration.")
+    _safe_extract(zip_path, destination_folder)
+    print("Successfully unzipped BASALT model archive.")
 
 
 if __name__ == '__main__':

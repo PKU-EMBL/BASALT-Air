@@ -117,7 +117,7 @@ def Contigs_aligner(Contigs_assembly1, num_threads):
     for line in open(blast_output,'r'):
         simi=str(line).strip().split('\t')[2]
         if float(simi) >= 99:
-            length=eval(str(line).strip().split('\t')[3])
+            length=int(str(line).strip().split('\t')[3])
             contig1=str(line).strip().split('\t')[0]
             contig2=str(line).strip().split('\t')[1]
 
@@ -929,7 +929,7 @@ def seq_comparator(blast_output, binset1, binset2, seq_len1, seq_len2,
     print('Parsing '+blast_output)
     for line in open(blast_output,'r'):
         simi=str(line).strip().split('\t')[2]
-        length=eval(str(line).strip().split('\t')[3])
+        length=int(str(line).strip().split('\t')[3])
         # if float(simi) >= 99 and int(length) >= 500:
             # ID1_ORFs=str(line).strip().split('\t')[1] ### Be aware of the difference between ID1 and ID2. Seq1 has been set as database. 
             # ID1=ID1_ORFs.split('_')[0]
@@ -2674,7 +2674,7 @@ def _binset_comparator_checkm2(binset1, binset2, coverage1, coverage2,
     for line in open('binset2_vs_binset1.txt','r'):
         simi=str(line).strip().split('\t')[2]
         if float(simi) >= 99:
-            length=eval(str(line).strip().split('\t')[3])
+            length=int(str(line).strip().split('\t')[3])
             contig2=str(line).strip().split('\t')[0]
             if '||' not in contig2:
                 org_contig2_id=str(contig2).split('|')[1].strip()
@@ -4188,7 +4188,7 @@ def _binset_comparator_checkm(binset1, binset2, coverage1, coverage2,
         simi=str(line).strip().split('\t')[2]
         if float(simi) >= 99:
             blast_output3.write(str(line))
-            length=eval(str(line).strip().split('\t')[3])
+            length=int(str(line).strip().split('\t')[3])
             contig2=str(line).strip().split('\t')[0]
             if '||' not in contig2:
                 org_contig2_id=str(contig2).split('|')[1].strip()

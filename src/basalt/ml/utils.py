@@ -10,6 +10,7 @@ PyTorch models, and computing focal loss.
 
 import os
 import sys
+import tempfile
 from glob import glob
 
 from torch import nn
@@ -51,18 +52,26 @@ def download_model(url, local_dir=None):
     print(f"File will be saved in {local_path}.")
 
     # Stream the file to disk with a progress bar to support large files.
-    response = requests.get(url, stream=True)
-    response.raise_for_status()
-    total_size = int(response.headers.get('content-length', 0))
-    block_size = 1024
-    progress_bar = tqdm(total=total_size, unit='iB', unit_scale=True)
-
-    with open(local_path, 'wb') as f:
-        for data in response.iter_content(block_size):
-            progress_bar.update(len(data))
-            f.write(data)
-
-    progress_bar.close()
+    fd, temp_path = tempfile.mkstemp(prefix='.model.', suffix='.part', dir=local_dir)
+    os.close(fd)
+    try:
+        response = requests.get(url, stream=True, timeout=(10, 120))
+        response.raise_for_status()
+        total_size = int(response.headers.get('content-length', 0))
+        block_size = 1024 * 1024
+        with tqdm(total=total_size, unit='iB', unit_scale=True) as progress_bar:
+            with open(temp_path, 'wb') as f:
+                for data in response.iter_content(block_size):
+                    if data:
+                        progress_bar.update(len(data))
+                        f.write(data)
+        os.replace(temp_path, local_path)
+    except Exception:
+        try:
+            os.unlink(temp_path)
+        except OSError:
+            pass
+        raise
     return local_dir
 
 def del_best_ckpt(log_dir):
@@ -73,7 +82,8 @@ def del_best_ckpt(log_dir):
     re-running experiments.
     """
     for i in glob(os.path.join(log_dir, '*best*')):
-        os.remove(i)
+        if os.path.isfile(i) or os.path.islink(i):
+            os.remove(i)
 
 # def norm(t, type='mmn'):
 #     if type == 'mmn':
@@ -140,6 +150,18 @@ def get_log_dir(set='train', comment=''):
     return log_dir
 
 
+def _build_loss_function(loss_fun, weight, device):
+    """Build a configured training loss or fail with a useful message."""
+    if loss_fun == 'ce':
+        class_weights = torch.tensor(
+            [weight, 1 - weight], dtype=torch.float, device=device
+        )
+        return torch.nn.CrossEntropyLoss(weight=class_weights)
+    if loss_fun == 'fl':
+        return focal_loss(alpha=weight, num_classes=2)
+    raise ValueError("loss_fun must be 'ce' or 'fl'; got {!r}".format(loss_fun))
+
+
 def train_one_epoch(model, optimizer, data_loader, device, epoch, weight, loss_fun):
     """
     Train the model for a single epoch.
@@ -149,11 +171,7 @@ def train_one_epoch(model, optimizer, data_loader, device, epoch, weight, loss_f
     optimizer and loss function.
     """
     model.train()
-    if loss_fun == 'ce':
-        loss_function = torch.nn.CrossEntropyLoss(weight=torch.tensor([weight, 1-weight], dtype=torch.float).to(device))
-        # loss_function = torch.nn.CrossEntropyLoss()
-    elif loss_fun == 'fl':
-        loss_function = focal_loss(alpha=weight, num_classes=2)
+    loss_function = _build_loss_function(loss_fun, weight, device)
     mean_loss = torch.zeros(1).to(device)
     optimizer.zero_grad()
 
@@ -190,11 +208,7 @@ def evaluate(model, data_loader, device, epoch, weight, loss_fun):
     """
     model.eval()
 
-    if loss_fun == 'ce':
-        loss_function = torch.nn.CrossEntropyLoss(weight=torch.tensor([weight, 1-weight], dtype=torch.float).to(device))
-        # loss_function = torch.nn.CrossEntropyLoss()
-    elif loss_fun == 'fl':
-        loss_function = focal_loss(alpha=weight, num_classes=2)
+    loss_function = _build_loss_function(loss_fun, weight, device)
 
     tr, pr = [], []
 
@@ -219,10 +233,10 @@ def evaluate(model, data_loader, device, epoch, weight, loss_fun):
     # print(accuracy_score(tr, pr))
     mask_0 = tr == 0
     tr_0, pr_0 = tr[mask_0], pr[mask_0]
-    acc_0 = np.sum(tr_0==pr_0)/tr_0.shape[0]
+    acc_0 = np.mean(tr_0 == pr_0) if tr_0.size else 0.0
     mask_1 = tr == 1
     tr_1, pr_1 = tr[mask_1], pr[mask_1]
-    acc_1 = np.sum(tr_1==pr_1)/tr_1.shape[0]
+    acc_1 = np.mean(tr_1 == pr_1) if tr_1.size else 0.0
 
     return acc_0, acc_1
 

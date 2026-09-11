@@ -83,7 +83,7 @@ parser.add_argument('--dry-run', action='store_true', dest='dry_run',
 parser.add_argument('-a', '--assemblies', type=str, dest='assemblies',
                     help='List of assemblies, e.g.: as1.fa,as2.fa')
 parser.add_argument('-s', '--shortreads', type=str, dest='sr_datasets',
-                    help='List of paired-end reads. Each pair is "mate1,mate2". Multiple pairs are separated by "/" or ";" (use ";" if any path is absolute, since "/" collides with directory separators). e.g.: r1_1.fq,r1_2.fq/r2_1.fq,r2_2.fq  or  /abs/r1_1.fq,/abs/r1_2.fq;/abs/r2_1.fq,/abs/r2_2.fq')
+                    help='List of paired-end reads. Each pair is "mate1,mate2". Multiple pairs are separated by "/" or ";"; use ";" for clarity with directory paths. e.g.: r1_1.fq,r1_2.fq/r2_1.fq,r2_2.fq or data/r1_1.fq,data/r1_2.fq;data/r2_1.fq,data/r2_2.fq')
 parser.add_argument('-l', '--longreads', type=str, dest='long_datasets',
                     help='Including ont and pb dataset, excluding hifi dataset. List of long reads, e.g.: lr1.fq,lr2.fq')
 parser.add_argument('-hf', '--hifi', type=str, dest='hifi_datasets',
@@ -130,7 +130,7 @@ parser.add_argument('--sensitive', type=str, dest='binning_sensitive', default='
 #                     help='Hybrid data, including both HTS and ont/pb datasets')
 parser.add_argument('-d','--data-feeding-folder', type=str, dest='data_feeding_folder',
                     help='List of folder name of extra binset(s) for data feeding, e.g.: -d binset1_folder_name,binset2_folder_name')
-parser.add_argument('--binset-index', type=str, dest='extra_binset_start_index', default=500,
+parser.add_argument('--binset-index', type=int, dest='extra_binset_start_index', default=500,
                     help='Optional parameter for data feeding. The start index of the extra binset, e.g.: -bi 5. BASALT-Air already set a default index, but if you already had 4 assemblies, the binset start index could be 5')
 # parser.add_argument('--only-refinement', action='store_true', dest='only_refinement',
 #                     help='Only carry out refinement, e.g.: --only-refinement')
@@ -239,7 +239,7 @@ def _build_manifest(args_namespace, resolved):
     return {
         'basalt_version': _v,
         'argv': list(sys.argv),
-        'cwd_at_invocation': os.getcwd(),
+        'cwd_at_invocation': resolved.get('invocation_cwd', os.getcwd()),
         'workdir': resolved.get('workdir'),
         'outdir': resolved.get('outdir'),
         'parameters': vars(args_namespace),
@@ -304,15 +304,55 @@ def _check_files_exist(paths, label):
         _fail('{} file(s) not found: {}'.format(label, ', '.join(missing)))
 
 
+def _resolve_user_path(path, base_dir):
+    """Resolve a command-line path relative to the invocation directory.
+
+    BASALT changes into ``--workdir`` before running the pipeline.  Resolving
+    relative input names after that change would make them relative to the
+    work directory instead of the directory in which the user ran BASALT.
+    Keep the resolved path absolute until ``_link_into_cwd`` creates the
+    basename links expected by the legacy pipeline modules.
+    """
+    if path is None:
+        return path
+    value = os.path.expanduser(str(path).strip())
+    if not value:
+        return value
+    if not os.path.isabs(value):
+        value = os.path.join(base_dir, value)
+    return os.path.abspath(os.path.normpath(value))
+
+
+def _resolve_input_paths(base_dir):
+    """Anchor all path-bearing inputs to the original invocation directory."""
+    global assembly_list, lr_list, hifi_list, hic_list
+    global datasets, coverage_list, binsets_list
+    global data_feeding_folder, refinement_binset
+
+    assembly_list = [_resolve_user_path(p, base_dir) for p in assembly_list]
+    lr_list = [_resolve_user_path(p, base_dir) for p in lr_list]
+    hifi_list = [_resolve_user_path(p, base_dir) for p in hifi_list]
+    hic_list = [_resolve_user_path(p, base_dir) for p in hic_list]
+    coverage_list = [_resolve_user_path(p, base_dir) for p in coverage_list]
+    for key, pair in list(datasets.items()):
+        datasets[key] = [_resolve_user_path(pair[0], base_dir),
+                         _resolve_user_path(pair[1], base_dir)]
+    data_feeding_folder = [_resolve_user_path(p, base_dir)
+                           for p in data_feeding_folder]
+    binsets_list = [_resolve_user_path(p, base_dir) for p in binsets_list]
+    if refinement_binset:
+        refinement_binset = _resolve_user_path(refinement_binset, base_dir)
+
+
 def _parse_paired_reads(value):
     """Parse the -s/--shortreads value into ``{idx: [mate1, mate2]}``.
 
     Supports three forms:
       * legacy '/'-separated pair groups, e.g. ``a,b/c,d``;
-      * ';'-separated pair groups (use this when paths are absolute, since
-        '/' collides with the filesystem separator), e.g. ``/x/a,/x/b;/x/c,/x/d``;
-      * a flat comma list — auto-paired by twos — used when '/' would
-        collide with absolute paths and no ';' was given.
+      * ';'-separated pair groups, e.g. ``data/a,data/b;data/c,data/d``;
+      * a flat comma list — auto-paired by twos. This form is selected when
+        '/' is part of a relative or absolute filename rather than a group
+        delimiter.
     Empty or missing input yields an empty dict (callers may dispatch a
     flow that needs no short reads).
     """
@@ -324,9 +364,22 @@ def _parse_paired_reads(value):
 
     if ';' in text:
         groups = [g.strip() for g in text.split(';') if g.strip()]
-    elif '/' in text and not text.lstrip().startswith('/'):
-        # Legacy form: "a,b/c,d". Only safe when no token is absolute.
-        groups = [g.strip() for g in text.split('/') if g.strip()]
+    elif '/' in text:
+        # Keep the historical "a,b/c,d" form, but only when every slash
+        # split produces a complete pair. Otherwise '/' belongs to one or
+        # more relative/absolute filenames and the comma list is paired.
+        candidate = [g.strip() for g in text.split('/') if g.strip()]
+        if candidate and all(len([x for x in g.split(',') if x.strip()]) == 2
+                             for g in candidate):
+            groups = candidate
+        else:
+            tokens = [t.strip() for t in text.split(',') if t.strip()]
+            if len(tokens) % 2 != 0:
+                _fail('--shortreads must list an even number of files when '
+                      'pairs are not delimited by "/" or ";"; got {} file(s)'
+                      .format(len(tokens)))
+            groups = [','.join(tokens[i:i + 2])
+                      for i in range(0, len(tokens), 2)]
     else:
         # Either no separator at all (single pair "a,b") or the input
         # contains absolute paths whose '/' would corrupt a '/'-split.
@@ -464,6 +517,8 @@ def validate_inputs():
         _fail('--threads must be in [1, 1024]; got {}'.format(num_threads))
     if ram <= 0:
         _fail('--ram must be positive; got {}'.format(ram))
+    if binsetindex <= 0:
+        _fail('--binset-index must be positive; got {}'.format(binsetindex))
     if not (0 <= min_cpn <= 100):
         _fail('--min-cpn must be in [0, 100]; got {}'.format(min_cpn))
     if not (0 <= max_ctn <= 100):
@@ -612,6 +667,9 @@ def main():
     global binsets_list, datasets, assembly_list, lr_list, hic_list, eb_list, pwd
     global workdir, outdir
 
+    # Capture this before changing into --workdir.  Every relative path in
+    # the command line is defined relative to where BASALT was invoked.
+    invocation_cwd = os.getcwd()
     args = parser.parse_args()
 
     # --check-deps: verify external tools are on PATH and exit (0 if all
@@ -652,15 +710,15 @@ def main():
     # Parse and normalise input lists.
     datasets = _parse_paired_reads(sr_datasets)
     try:
-        assembly_list = assemblies.split(',')
+        assembly_list = [x.strip() for x in assemblies.split(',') if x.strip()]
     except Exception:
         assembly_list = []
     try:
-        lr_list = [x.strip() for x in long_reads_list.split(',')]
+        lr_list = [x.strip() for x in long_reads_list.split(',') if x.strip()]
     except Exception:
         lr_list = []
     try:
-        hifi_list = [x.strip() for x in hifi_list.split(',')]
+        hifi_list = [x.strip() for x in hifi_list.split(',') if x.strip()]
     except Exception:
         hifi_list = []
     hic_list = []  # Hi-C input not currently exposed
@@ -669,18 +727,22 @@ def main():
     except Exception:
         eb_list = []
     try:
-        data_feeding_folder = [x.strip() for x in data_feeding_folder.split(',')]
+        data_feeding_folder = [x.strip() for x in data_feeding_folder.split(',') if x.strip()]
     except Exception:
         data_feeding_folder = []
     try:
-        coverage_list = [x.strip() for x in coverage_list.split(',')]
+        coverage_list = [x.strip() for x in coverage_list.split(',') if x.strip()]
     except Exception:
         coverage_list = []
     try:
-        binsets_list = [x.strip() for x in binsets_list.split(',')]
+        binsets_list = [x.strip() for x in binsets_list.split(',') if x.strip()]
     except Exception:
         binsets_list = []
 
+    # Validate before changing directory, but after resolving relative paths
+    # against the invocation directory so --workdir does not alter their
+    # meaning.
+    _resolve_input_paths(invocation_cwd)
     validate_inputs()
 
     # Allow path-bearing -o for backward compat: split into outdir + basename.
@@ -688,14 +750,14 @@ def main():
         _od, _bn = os.path.split(output_folder)
         if _od:
             if outdir is None:
-                outdir = _od
+                outdir = _resolve_user_path(_od, invocation_cwd)
             output_folder = _bn or 'Final_binset'
 
     # Resolve workdir (where intermediate process files live) and chdir into
     # it so the rest of the pipeline — which assumes cwd is the work dir —
     # keeps working unchanged.
     if workdir:
-        workdir = os.path.abspath(os.path.expanduser(workdir))
+        workdir = _resolve_user_path(workdir, invocation_cwd)
         try:
             os.makedirs(workdir, exist_ok=True)
         except OSError as e:
@@ -709,7 +771,7 @@ def main():
     # Resolve outdir (where the final output folder is moved to). Defaults
     # to workdir, in which case no post-pipeline move happens.
     if outdir:
-        outdir = os.path.abspath(os.path.expanduser(outdir))
+        outdir = _resolve_user_path(outdir, invocation_cwd)
         try:
             os.makedirs(outdir, exist_ok=True)
         except OSError as e:
@@ -766,6 +828,7 @@ def main():
 
     # Reproducibility: capture argv, version, host, parameters, timing.
     manifest = _build_manifest(args, {
+        'invocation_cwd': invocation_cwd,
         'workdir': workdir, 'outdir': outdir,
         'assemblies': assembly_list, 'short_reads': datasets,
         'long_reads': lr_list, 'hifi_reads': hifi_list,

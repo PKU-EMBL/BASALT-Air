@@ -28,6 +28,9 @@ dependencies = [
     "numpy",
     "scikit-learn",
     "torch",
+    "requests",
+    "scipy",
+    "tqdm",
 ]
 
 [project.optional-dependencies]

@@ -25,6 +25,9 @@ pandas       = "*"
 numpy        = "*"
 scikit-learn = "*"
 pytorch-gpu  = "*"
+requests     = "*"
+scipy        = "*"
+tqdm         = "*"
 libopenblas  = "*"  # BLAS library for numerical operations
 
 # System compatibility layer for older Linux systems

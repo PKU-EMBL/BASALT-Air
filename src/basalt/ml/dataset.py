@@ -9,6 +9,7 @@ matrices and labels used by the contamination detection models.
 
 import os.path
 import pickle
+import ast
 from collections import Counter
 from glob import glob
 from itertools import combinations
@@ -90,14 +91,15 @@ class MyDataSet(Dataset):
                     label = l[0]
                     if label in list(class_dict.keys()):
                         label = class_dict[label]
-                        ind = list(eval(l[3]).keys())
+                        feature_map = ast.literal_eval(l[3])
+                        ind = list(feature_map.keys())
                         cs = [c for c in combinations(ind, use_col)]
                         for c in cs:
-                            data = [eval(l[3])[j] for j in c]
+                            data = [feature_map[j] for j in c]
                             if fea and len(data) > 1:
                                 data += get_time_domain_features(np.array(data))
                             if use_256:
-                                data += list(eval(l[5]))
+                                data += list(ast.literal_eval(l[5]))
                             temp_labels.append(label)
                             temp_datas.append(data)
             datas.append(norm(np.vstack(temp_datas), type))
@@ -135,13 +137,14 @@ class MyDataSet_(Dataset):
                 label = l[0]
                 if label in list(class_dict.keys()):
                     label = class_dict[label]
-                    ind = list(eval(l[3]).keys())
+                    feature_map = ast.literal_eval(l[3])
+                    ind = list(feature_map.keys())
                     self.n_col = len(ind)
-                    data = [eval(l[3])[j] for j in ind]
+                    data = [feature_map[j] for j in ind]
                     if fea and len(data) > 1:
                         data += get_time_domain_features(np.array(data))
                     if use_256:
-                        data += list(eval(l[5]))
+                        data += list(ast.literal_eval(l[5]))
                     temp_labels.append(label)
                     temp_datas.append(data)
         datas.append(norm(np.vstack(temp_datas), type))
@@ -176,14 +179,14 @@ class MyDataSet_test(Dataset):
                 genes.append(l[0].strip())
                 temp_labels, temp_datas = [], []
             else:
-                data = eval(l[2])
+                data = ast.literal_eval(l[2])
                 index = list(data.keys())
                 self.n_col = len(index)
                 data = [data[j] for j in index]
                 if fea and len(data) > 1:
                     data += get_time_domain_features(np.array(data))
                 if use_256:
-                    data += list(eval(l[4]))
+                    data += list(ast.literal_eval(l[4]))
                 temp_datas.append(data)
         datas.append(norm(np.vstack(temp_datas), type))
 

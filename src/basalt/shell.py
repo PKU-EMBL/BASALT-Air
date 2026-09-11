@@ -61,6 +61,9 @@ def run_cmd(cmd, timeout=None, check=True, capture=False, cwd=None, env=None):
     else:
         argv = list(cmd)
         display = ' '.join(shlex.quote(str(a)) for a in argv)
+    if not argv:
+        raise CommandError('cannot run an empty command')
+    argv = [str(arg) for arg in argv]
 
     stdout = subprocess.PIPE if capture else None
     stderr = subprocess.PIPE if capture else None
@@ -76,9 +79,9 @@ def run_cmd(cmd, timeout=None, check=True, capture=False, cwd=None, env=None):
         raise CommandError(
             'command timed out after {}s: {}'.format(timeout, display)
         ) from e
-    except FileNotFoundError as e:
+    except (FileNotFoundError, PermissionError) as e:
         raise CommandError(
-            'executable not found for command: {} ({})'.format(display, e)
+            'unable to execute command: {} ({})'.format(display, e)
         ) from e
 
     if check and result.returncode != 0:

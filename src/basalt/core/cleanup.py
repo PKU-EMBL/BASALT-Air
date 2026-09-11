@@ -110,8 +110,9 @@ def cleanup(assembly_list):
     _rm('*_MP_1', '*_MP_2', '*_gf_lr_polished', '*_gf_lr', '*_gf_lr_mod',
         '*_gf_lr_checkm', '*_long_read')
 
-    # Misc per-run logs / scratch files
-    _rm('Bin_reads_summary.txt', 'Depth_total.txt', 'Basalt_log.txt',
+    # Misc per-run scratch files. Keep Basalt_log.txt: the CLI logger writes
+    # the final status there after pipeline cleanup completes.
+    _rm('Bin_reads_summary.txt', 'Depth_total.txt',
         'Assembly_mo_list.txt', 'Assembly_MoDict.txt', '*_gf_lr_blasted.txt',
         'Bestbinset_list.txt', 'Bin_extract_contigs_after_coverage_filtration.txt',
         'Bin_lw.txt', 'Bin_record_error.txt')

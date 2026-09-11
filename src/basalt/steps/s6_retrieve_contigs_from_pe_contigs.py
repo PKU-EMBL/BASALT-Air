@@ -302,7 +302,7 @@ def cycle_mt(bin_connecting_contigs, bin_connecting_contigs2,
             m_before = len(bin_connecting_contigs)
             for contigs in connections.keys():
                 for item in connections[contigs].keys():
-                    connections_num=int(eval(connections[contigs][item]))
+                    connections_num=int(connections[contigs][item])
                     if contigs in bin_connecting_contigs.keys() and item not in bin_connecting_contigs.keys():
                         bin_connecting_contigs[item]=m
                         bin_connecting_contigs2[item]=m
@@ -724,7 +724,7 @@ def _bin_comparison_checkm2(original_bin_folder, new_bins_checkm, new_bin_folder
             for line in open('DeepRefinement_checkpoint.txt','r'):
                 n1+=1
                 if n1 == n:
-                    lp=int(eval(str(line)[0]))
+                    lp=int(str(line)[0])
             
             contig_neutral, contig_positive, contig_negative, contig_positive_suspect, contig_negative_suspect, contig_num = {}, {}, {}, {}, {}, {}
             for org_bin_id in further_refined_bin_contig.keys():
@@ -1009,8 +1009,8 @@ def _bin_comparison_checkm2(original_bin_folder, new_bins_checkm, new_bin_folder
                         elif refined_delta == org_delta:
                             if refined_bin_cpn < 85:
                                 if '_RT-D' in sel_bin and '_RT-D' in refined_bin_id:
-                                    num1=int(eval(sel_bin.split('_RT-D')[1]))
-                                    num2=int(eval(refined_bin_id.split('_RT-D')[1]))
+                                    num1=int(sel_bin.split('_RT-D')[1])
+                                    num2=int(refined_bin_id.split('_RT-D')[1])
                                     if num1 > num2:
                                         del bestbin[org_bin_id][sel_bin]
                                         replace_bin[sel_bin]=''
@@ -1943,7 +1943,7 @@ def _bin_comparison_checkm(original_bin_folder, new_bins_checkm, new_bin_folder,
                     taxon=str(line).strip().split('lineage')[1].split('\'')[2].strip()
                     completeness=float(str(line).strip().split('Completeness\':')[1].split(',')[0].strip())
                     contamination=float(str(line).strip().split('Contamination\':')[1].split(',')[0].split('}')[0].strip())
-                    genome_size=float(eval(str(line).strip().split('Genome size\':')[1].split(',')[0].strip()))
+                    genome_size=float(str(line).strip().split('Genome size\':')[1].split(',')[0].strip())
                     bin_checkm[str(binID)]={}
                     # bin_checkm[str(binID)]['Connections']=int(connections)
                     bin_checkm[str(binID)]['marker lineage']=str(taxon)
@@ -2363,8 +2363,8 @@ def _bin_comparison_checkm(original_bin_folder, new_bins_checkm, new_bin_folder,
                     elif refined_delta == org_delta:
                         if refined_bin_cpn < 85:
                             if '_RT-D' in sel_bin and '_RT-D' in refined_bin_id:
-                                num1=int(eval(sel_bin.split('_RT-D')[1]))
-                                num2=int(eval(refined_bin_id.split('_RT-D')[1]))
+                                num1=int(sel_bin.split('_RT-D')[1])
+                                num2=int(refined_bin_id.split('_RT-D')[1])
                                 if num1 > num2:
                                     del bestbin[org_bin_id][sel_bin]
                                     replace_bin[sel_bin]=''
@@ -2836,7 +2836,7 @@ def _parse_bin_in_bestbinset_checkm(assemblies_list, binset, outlier_remover_fol
                 bins_checkm[str(binID)]={}
                 bins_checkm[str(binID)]['marker lineage']=str(taxon)
                 bins_checkm[str(binID)]['Completeness']=float(completeness)
-                bins_checkm[str(binID)]['Genome size']=float(eval(genome_size))
+                bins_checkm[str(binID)]['Genome size']=float(genome_size)
                 bins_checkm[str(binID)]['Contamination']=float(contamination)
         except:
             print('There is no retrieved bin')

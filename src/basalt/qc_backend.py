@@ -34,6 +34,7 @@ should migrate to ``bin['contig_size']`` so they work under either backend.
 from __future__ import annotations
 
 import os
+import shlex
 from glob import glob
 
 
@@ -127,7 +128,10 @@ class CheckM2Backend(QCBackend):
     def build_cmd(self, threads, bin_folder, output_dir, ext='fa'):
         return (
             'checkm2 predict -t {threads} -i {bin_folder} -x {ext} -o {output_dir}'
-            .format(threads=threads, bin_folder=bin_folder, ext=ext, output_dir=output_dir)
+            .format(threads=shlex.quote(str(threads)),
+                    bin_folder=shlex.quote(str(bin_folder)),
+                    ext=shlex.quote(str(ext)),
+                    output_dir=shlex.quote(str(output_dir)))
         )
 
     def results_path(self, output_dir):
@@ -208,7 +212,10 @@ class CheckMBackend(QCBackend):
     def build_cmd(self, threads, bin_folder, output_dir, ext='fa'):
         return (
             'checkm lineage_wf -t {threads} -x {ext} {bin_folder} {output_dir}'
-            .format(threads=threads, ext=ext, bin_folder=bin_folder, output_dir=output_dir)
+            .format(threads=shlex.quote(str(threads)),
+                    ext=shlex.quote(str(ext)),
+                    bin_folder=shlex.quote(str(bin_folder)),
+                    output_dir=shlex.quote(str(output_dir)))
         )
 
     def results_path(self, output_dir):

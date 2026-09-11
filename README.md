@@ -9,7 +9,7 @@ BASALT-Air is a lightweight, modular metagenomic binning and refinement pipeline
 
 ## Highlights
 
-- Absolute input path support, so runs do not need to start inside data directories.
+- Relative and absolute input path support, including runs that use a separate work directory.
 - Multi-assembly binning and dereplication.
 - Deep-learning-based bin refinement.
 - Short-read, ONT/PacBio long-read, and PacBio HiFi support.
@@ -159,7 +159,20 @@ basalt -a assembly.fa \
        -t 60 -m 250
 ```
 
-Run from any directory with absolute paths:
+Input paths may be relative to the directory where `basalt` is invoked. They remain valid when
+`--workdir` points elsewhere:
+
+```bash
+basalt \
+    -a data/assembly.fa \
+    -s data/sample1.R1.fq,data/sample1.R2.fq \
+    -l data/sample1.nanopore.fq \
+    -t 64 -m 128 \
+    -o my_project \
+    --workdir work
+```
+
+Absolute paths are also supported, so runs do not need to start inside data directories:
 
 ```bash
 basalt \
@@ -200,6 +213,13 @@ basalt \
 | `--outdir` | Directory for final output | same as `--workdir` |
 
 Run `basalt --help` for the full option list.
+
+All input files and existing binset/coverage directories may be given as
+relative paths. BASALT resolves them from the directory where the command is
+started, then stages them into `--workdir` as needed.
+
+For a local installation, run the regression suite with `pytest` after
+installing the `dev` extras (`pip install -e '.[dev]'`).
 
 ## Demo Dataset
 

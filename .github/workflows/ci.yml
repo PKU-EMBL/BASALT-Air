@@ -1,0 +1,24 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.12"]
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      # The focused regression tests do not need the large scientific runtime
+      # stack, so avoid downloading it just to validate packaging and helpers.
+      - run: python -m pip install --upgrade pip pytest
+      - run: python -m pip install --no-deps -e .
+      - run: python -m compileall -q src
+      - run: python -m pytest -q
